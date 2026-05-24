@@ -1,15 +1,14 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from api.core.database import connect_to_mongo, close_mongo_connection
+from api.routes import jobs
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
-    # Startup
     await connect_to_mongo()
     yield
-    # Shutdown
     await close_mongo_connection()
 
 
@@ -20,12 +19,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Routes
+app.include_router(jobs.router)
+
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint with database status."""
     from api.core.database import db
-    
+
     db_status = "disconnected"
     if db.client:
         try:
@@ -33,7 +35,7 @@ async def health_check():
             db_status = "connected"
         except Exception:
             db_status = "error"
-    
+
     return {
         "status": "ok",
         "service": "scrapyard-api",
