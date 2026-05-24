@@ -1,0 +1,17 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Установка зависимостей
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Установка Playwright браузеров
+RUN playwright install --with-deps chromium
+
+# Копирование кода
+COPY worker/ ./worker/
+COPY api/ ./api/
+
+# Запуск Celery worker
+CMD ["celery", "-A", "worker.celery_app", "worker", "--loglevel=info"]
