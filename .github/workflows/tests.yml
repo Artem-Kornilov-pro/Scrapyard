@@ -14,12 +14,17 @@ jobs:
       mongodb:
         image: mongo:7.0
         ports:
-          - 27017:27017
+          - 27017:270
 
       redis:
         image: redis:7-alpine
         ports:
           - 6379:6379
+
+    env:
+      MONGO_URI: mongodb://localhost:27017
+      DB_NAME: scrapyard_test
+      REDIS_URL: redis://localhost:6379/0
 
     steps:
       - uses: actions/checkout@v4
