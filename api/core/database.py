@@ -1,17 +1,17 @@
 from typing import Optional
 
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from motor.core import AgnosticCollection
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 from api.core.config import settings
 
 
 class MongoDB:
     """MongoDB connection manager using Motor async driver."""
-    
+
     client: Optional[AsyncIOMotorClient] = None
     db: Optional[AsyncIOMotorDatabase] = None
-    
+
     scraping_jobs: Optional[AgnosticCollection] = None
     scraped_results: Optional[AgnosticCollection] = None
 
@@ -23,24 +23,24 @@ async def connect_to_mongo():
     """Connect to MongoDB and initialize indexes."""
     db.client = AsyncIOMotorClient(settings.mongo_uri)
     db.db = db.client[settings.db_name]
-    
+
     db.scraping_jobs = db.db.scraping_jobs
     db.scraped_results = db.db.scraped_results
-    
+
     await db.scraping_jobs.create_index("job_id", unique=True)
     await db.scraping_jobs.create_index("status")
     await db.scraping_jobs.create_index([("status", 1), ("next_run", 1)])
     await db.scraping_jobs.create_index("tags")
-    
+
     await db.scraped_results.create_index("job_id")
     await db.scraped_results.create_index("timestamp")
     await db.scraped_results.create_index([("job_id", 1), ("timestamp", -1)])
-    
+
     await db.scraped_results.create_index(
         "timestamp",
         expireAfterSeconds=90 * 24 * 60 * 60
     )
-    
+
     print(f"Connected to MongoDB: {settings.db_name}")
 
 

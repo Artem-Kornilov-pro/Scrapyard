@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from typing import Optional
 from uuid import uuid4
 
-from croniter import croniter # type: ignore[import-untyped]
+from croniter import croniter  # type: ignore[import-untyped]
 from pydantic import BaseModel, Field, field_validator
 
 
