@@ -1,11 +1,11 @@
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any, Optional
 from uuid import uuid4
 
 from croniter import croniter  # type: ignore[import-untyped]
 
 from api.core.database import db
-from api.models.job import ScrapingJobCreate, ScrapingJobUpdate, ScrapingJobInDB
+from api.models.job import ScrapingJobCreate, ScrapingJobInDB, ScrapingJobUpdate
 
 
 class JobService:
