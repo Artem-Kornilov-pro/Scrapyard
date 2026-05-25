@@ -1,11 +1,11 @@
 import pytest
 from pydantic import ValidationError
+
 from api.models.job import (
     ScrapingJobCreate,
-    ScrapingJobUpdate,
     ScrapingJobInDB,
+    ScrapingJobUpdate,
 )
-
 
 VALID_SELECTORS = {
     "items": "div.product",
