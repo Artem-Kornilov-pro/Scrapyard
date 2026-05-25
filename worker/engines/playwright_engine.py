@@ -41,7 +41,8 @@ class PlaywrightEngine:
         self._page = await self._browser.new_page(
             viewport=self.viewport,
         )
-        self._page.set_default_timeout(self.timeout)
+        if self._page:
+            self._page.set_default_timeout(self.timeout)
         return self._page
 
     async def navigate(

@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from worker.engines.playwright_engine import PlaywrightEngine
 
@@ -8,11 +9,11 @@ from worker.engines.playwright_engine import PlaywrightEngine
 def mock_playwright():
     """Mock Playwright and browser."""
     with patch("worker.engines.playwright_engine.async_playwright") as mock_pw:
-        # Setup mocks
         mock_browser = AsyncMock()
-        mock_page = AsyncMock()
-        mock_browser.new_page = AsyncMock(return_value=mock_page)
+        mock_page = MagicMock()
         mock_page.goto = AsyncMock()
+        mock_page.set_default_timeout = MagicMock()
+        mock_browser.new_page = AsyncMock(return_value=mock_page)
 
         mock_playwright_instance = AsyncMock()
         mock_playwright_instance.chromium.launch = AsyncMock(
