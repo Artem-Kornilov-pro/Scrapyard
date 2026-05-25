@@ -1,9 +1,9 @@
 from api.models.job import (
     ScrapingJobBase,
     ScrapingJobCreate,
-    ScrapingJobUpdate,
     ScrapingJobInDB,
     ScrapingJobResponse,
+    ScrapingJobUpdate,
 )
 from api.models.result import (
     ScrapedResult,

@@ -1,6 +1,7 @@
 import pytest
 from pydantic import ValidationError
-from api.models.result import ScrapedResult, ResultMetadata
+
+from api.models.result import ResultMetadata, ScrapedResult
 
 
 class TestResultMetadata:

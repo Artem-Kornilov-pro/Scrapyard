@@ -1,4 +1,4 @@
-name: Tests
+name: Tests & Linting
 
 on:
   push:
@@ -14,7 +14,7 @@ jobs:
       mongodb:
         image: mongo:7.0
         ports:
-          - 27017:270
+          - 27017:27017
 
       redis:
         image: redis:7-alpine
@@ -36,8 +36,14 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run tests
-        run: pytest -v
+      - name: Run Ruff (linter)
+        run: ruff check .
+
+      - name: Run Mypy (type checker)
+        run: mypy api/ --ignore-missing-imports
+
+      - name: Run tests with coverage
+        run: pytest -v --cov=api --cov-report=term-missing

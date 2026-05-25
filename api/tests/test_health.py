@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 from fastapi.testclient import TestClient
 
 
@@ -28,14 +29,14 @@ def test_health_check_with_db(client):
     # Создаем мок-клиент
     mock_admin = AsyncMock()
     mock_admin.command = AsyncMock(return_value={"ok": 1})
-    
+
     mock_client = AsyncMock()
     mock_client.admin = mock_admin
-    
+
     # Патчим правильный путь: api.core.database.db
     with patch("api.core.database.db") as mock_db:
         mock_db.client = mock_client
-        
+
         response = client.get("/health")
         assert response.status_code == 200
         data = response.json()

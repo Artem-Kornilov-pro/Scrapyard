@@ -1,11 +1,11 @@
-from datetime import datetime, UTC
-from typing import Optional
+from datetime import UTC, datetime
+from typing import Any, Optional
 from uuid import uuid4
 
-from croniter import croniter
+from croniter import croniter  # type: ignore[import-untyped]
 
 from api.core.database import db
-from api.models.job import ScrapingJobCreate, ScrapingJobUpdate, ScrapingJobInDB
+from api.models.job import ScrapingJobCreate, ScrapingJobInDB, ScrapingJobUpdate
 
 
 class JobService:
@@ -22,12 +22,14 @@ class JobService:
             created_at=now,
             updated_at=now,
         )
+        assert db.scraping_jobs is not None
         await db.scraping_jobs.insert_one(job.model_dump())
         return job
 
     @staticmethod
     async def get_job(job_id: str) -> Optional[ScrapingJobInDB]:
         """Get a job by ID."""
+        assert db.scraping_jobs is not None
         doc = await db.scraping_jobs.find_one({"job_id": job_id})
         if doc:
             return ScrapingJobInDB(**doc)
@@ -41,7 +43,8 @@ class JobService:
         limit: int = 20,
     ) -> list[ScrapingJobInDB]:
         """List jobs with optional filtering and pagination."""
-        query = {}
+        assert db.scraping_jobs is not None
+        query: dict[str, Any] = {}
         if status:
             query["status"] = status
         if tags:
@@ -52,8 +55,11 @@ class JobService:
         return [ScrapingJobInDB(**doc) for doc in docs]
 
     @staticmethod
-    async def update_job(job_id: str, job_data: ScrapingJobUpdate) -> Optional[ScrapingJobInDB]:
+    async def update_job(
+        job_id: str, job_data: ScrapingJobUpdate
+    ) -> Optional[ScrapingJobInDB]:
         """Update an existing job."""
+        assert db.scraping_jobs is not None
         existing = await db.scraping_jobs.find_one({"job_id": job_id})
         if not existing:
             return None
@@ -64,9 +70,10 @@ class JobService:
 
         update_data["updated_at"] = datetime.now(UTC)
 
-        # Recalculate next_run if schedule changed
         if "schedule" in update_data:
-            update_data["next_run"] = JobService._calculate_next_run(update_data["schedule"])
+            update_data["next_run"] = JobService._calculate_next_run(
+                update_data["schedule"]
+            )
 
         await db.scraping_jobs.update_one(
             {"job_id": job_id},
@@ -74,13 +81,15 @@ class JobService:
         )
 
         updated = await db.scraping_jobs.find_one({"job_id": job_id})
+        assert updated is not None
         return ScrapingJobInDB(**updated)
 
     @staticmethod
     async def delete_job(job_id: str) -> bool:
         """Delete a job by ID."""
+        assert db.scraping_jobs is not None
         result = await db.scraping_jobs.delete_one({"job_id": job_id})
-        return result.deleted_count > 0
+        return bool(result.deleted_count > 0)
 
     @staticmethod
     async def pause_job(job_id: str) -> Optional[ScrapingJobInDB]:
@@ -90,6 +99,7 @@ class JobService:
     @staticmethod
     async def resume_job(job_id: str) -> Optional[ScrapingJobInDB]:
         """Resume a paused job."""
+        assert db.scraping_jobs is not None
         existing = await db.scraping_jobs.find_one({"job_id": job_id})
         if not existing:
             return None
@@ -108,11 +118,15 @@ class JobService:
         )
 
         updated = await db.scraping_jobs.find_one({"job_id": job_id})
+        assert updated is not None
         return ScrapingJobInDB(**updated)
 
     @staticmethod
-    async def _change_status(job_id: str, status: str) -> Optional[ScrapingJobInDB]:
+    async def _change_status(
+        job_id: str, status: str
+    ) -> Optional[ScrapingJobInDB]:
         """Change job status."""
+        assert db.scraping_jobs is not None
         existing = await db.scraping_jobs.find_one({"job_id": job_id})
         if not existing:
             return None
@@ -123,12 +137,16 @@ class JobService:
         )
 
         updated = await db.scraping_jobs.find_one({"job_id": job_id})
+        assert updated is not None
         return ScrapingJobInDB(**updated)
 
     @staticmethod
-    def _calculate_next_run(cron_expr: str, base_time: Optional[datetime] = None) -> datetime:
+    def _calculate_next_run(
+        cron_expr: str, base_time: Optional[datetime] = None
+    ) -> datetime:
         """Calculate next run time from cron expression."""
         if base_time is None:
             base_time = datetime.now(UTC)
-        cron = croniter(cron_expr, base_time)
-        return cron.get_next(datetime)
+        cron: croniter = croniter(cron_expr, base_time)
+        result: datetime = cron.get_next(datetime)
+        return result
