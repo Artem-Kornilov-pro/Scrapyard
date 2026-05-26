@@ -2,6 +2,7 @@ from typing import Optional
 
 from motor.core import AgnosticCollection
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+from pymongo import ASCENDING
 
 from api.core.config import settings
 
@@ -51,14 +52,23 @@ async def connect_to_mongo():
 
     # Indexes for scraped_results
     await db.scraped_results.create_index("job_id")
-    await db.scraped_results.create_index("timestamp")
-    await db.scraped_results.create_index([("job_id", 1), ("timestamp", -1)])
+    await db.scraped_results.create_index(
+        [("job_id", ASCENDING), ("timestamp", ASCENDING)])
+
+        # Drop existing timestamp indexes to avoid conflicts
+    try:
+        indexes = await db.scraped_results.index_information()
+        for name in indexes:
+            if name == "timestamp_1" or name == "timestamp_ttl":
+                await db.scraped_results.drop_index(name)
+    except Exception:
+        pass
+
     await db.scraped_results.create_index(
         "timestamp",
+        name="timestamp_ttl",
         expireAfterSeconds=90 * 24 * 60 * 60,
     )
-
-    print(f"Connected to MongoDB: {settings.db_name}")
 
 
 async def close_mongo_connection():

@@ -18,6 +18,12 @@ app.conf.update(
     task_reject_on_worker_lost=True,
     task_default_retry_delay=60,
     task_max_retries=3,
+    beat_schedule={
+        "sync-scheduled-jobs-every-minute": {
+            "task": "worker.tasks.sync_scheduled_jobs",
+            "schedule": 60.0,
+        },
+    },
 )
 
 app.autodiscover_tasks(["worker.tasks"])
