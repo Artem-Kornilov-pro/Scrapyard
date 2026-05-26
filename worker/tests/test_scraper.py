@@ -25,6 +25,8 @@ def mock_db():
         mock.scraping_jobs.find_one = AsyncMock()
         mock.scraped_results = MagicMock()
         mock.scraped_results.insert_one = AsyncMock()
+        mock.job_logs = MagicMock()
+        mock.job_logs.insert_one = AsyncMock()
         yield mock
 
 

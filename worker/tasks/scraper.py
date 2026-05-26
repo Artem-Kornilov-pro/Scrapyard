@@ -33,14 +33,7 @@ class ScrapingTask(Task):
     default_retry_delay=60,
 )
 def scrape_job(self: Task, job_config: dict[str, Any]) -> dict[str, Any]:
-    """Execute scraping job and save results to MongoDB.
-
-    Args:
-        job_config: Scraping job configuration dict.
-
-    Returns:
-        Dict with run_id and items_count.
-    """
+    """Execute scraping job and save results to MongoDB."""
     return _run_scrape(self, job_config)
 
 
@@ -54,6 +47,15 @@ async def _run_scrape(
 
     assert db.scraping_jobs is not None
     assert db.scraped_results is not None
+    assert db.job_logs is not None
+
+    # Log start
+    await db.job_logs.insert_one({
+        "job_id": job_id,
+        "run_id": run_id,
+        "status": "started",
+        "timestamp": start_time,
+    })
 
     try:
         async with PlaywrightEngine(headless=True) as engine:
@@ -91,6 +93,16 @@ async def _run_scrape(
             },
         )
 
+        # Log completion
+        await db.job_logs.insert_one({
+            "job_id": job_id,
+            "run_id": run_id,
+            "status": "completed",
+            "timestamp": datetime.now(UTC),
+            "duration_ms": duration_ms,
+            "items_scraped": len(items),
+        })
+
         logger.info(
             "Job %s completed: %d items in %dms",
             job_id,
@@ -102,6 +114,15 @@ async def _run_scrape(
 
     except Exception as exc:
         logger.error("Job %s failed: %s", job_id, str(exc))
+
+        # Log failure
+        await db.job_logs.insert_one({
+            "job_id": job_id,
+            "run_id": run_id,
+            "status": "failed",
+            "timestamp": datetime.now(UTC),
+            "error_type": type(exc).__name__,
+        })
 
         await db.scraping_jobs.update_one(
             {"job_id": job_id},
