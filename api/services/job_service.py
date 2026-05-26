@@ -1,9 +1,10 @@
 from datetime import UTC, datetime
-from typing import Any, Optional
+from typing import Any
 from uuid import uuid4
 
 from croniter import croniter  # type: ignore[import-untyped]
 
+from api.core.cache import analytics_cache, jobs_cache
 from api.core.database import db
 from api.models.job import ScrapingJobCreate, ScrapingJobInDB, ScrapingJobUpdate
 
@@ -24,10 +25,12 @@ class JobService:
         )
         assert db.scraping_jobs is not None
         await db.scraping_jobs.insert_one(job.model_dump())
+        await jobs_cache.delete_pattern("jobs:*")
+        await analytics_cache.delete_pattern("analytics:*")
         return job
 
     @staticmethod
-    async def get_job(job_id: str) -> Optional[ScrapingJobInDB]:
+    async def get_job(job_id: str) -> ScrapingJobInDB | None:
         """Get a job by ID."""
         assert db.scraping_jobs is not None
         doc = await db.scraping_jobs.find_one({"job_id": job_id})
@@ -37,8 +40,8 @@ class JobService:
 
     @staticmethod
     async def list_jobs(
-        status: Optional[str] = None,
-        tags: Optional[list[str]] = None,
+        status: str | None = None,
+        tags: list[str] | None = None,
         skip: int = 0,
         limit: int = 20,
     ) -> list[ScrapingJobInDB]:
@@ -57,7 +60,7 @@ class JobService:
     @staticmethod
     async def update_job(
         job_id: str, job_data: ScrapingJobUpdate
-    ) -> Optional[ScrapingJobInDB]:
+    ) -> ScrapingJobInDB | None:
         """Update an existing job."""
         assert db.scraping_jobs is not None
         existing = await db.scraping_jobs.find_one({"job_id": job_id})
@@ -79,6 +82,7 @@ class JobService:
             {"job_id": job_id},
             {"$set": update_data},
         )
+        await jobs_cache.delete_pattern("jobs:*")
 
         updated = await db.scraping_jobs.find_one({"job_id": job_id})
         assert updated is not None
@@ -89,15 +93,18 @@ class JobService:
         """Delete a job by ID."""
         assert db.scraping_jobs is not None
         result = await db.scraping_jobs.delete_one({"job_id": job_id})
+        await jobs_cache.delete_pattern("jobs:*")
         return bool(result.deleted_count > 0)
 
     @staticmethod
-    async def pause_job(job_id: str) -> Optional[ScrapingJobInDB]:
+    async def pause_job(job_id: str) -> ScrapingJobInDB | None:
         """Pause a job."""
-        return await JobService._change_status(job_id, "paused")
+        result = await JobService._change_status(job_id, "paused")
+        await jobs_cache.delete_pattern("jobs:*")
+        return result
 
     @staticmethod
-    async def resume_job(job_id: str) -> Optional[ScrapingJobInDB]:
+    async def resume_job(job_id: str) -> ScrapingJobInDB | None:
         """Resume a paused job."""
         assert db.scraping_jobs is not None
         existing = await db.scraping_jobs.find_one({"job_id": job_id})
@@ -116,6 +123,7 @@ class JobService:
             {"job_id": job_id},
             {"$set": update_data},
         )
+        await jobs_cache.delete_pattern("jobs:*")
 
         updated = await db.scraping_jobs.find_one({"job_id": job_id})
         assert updated is not None
@@ -124,7 +132,7 @@ class JobService:
     @staticmethod
     async def _change_status(
         job_id: str, status: str
-    ) -> Optional[ScrapingJobInDB]:
+    ) -> ScrapingJobInDB | None:
         """Change job status."""
         assert db.scraping_jobs is not None
         existing = await db.scraping_jobs.find_one({"job_id": job_id})
@@ -142,7 +150,7 @@ class JobService:
 
     @staticmethod
     def _calculate_next_run(
-        cron_expr: str, base_time: Optional[datetime] = None
+        cron_expr: str, base_time: datetime | None = None
     ) -> datetime:
         """Calculate next run time from cron expression."""
         if base_time is None:

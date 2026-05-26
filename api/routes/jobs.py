@@ -2,6 +2,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
+from api.core.cache import jobs_cache
 from api.models.job import ScrapingJobCreate, ScrapingJobInDB, ScrapingJobUpdate
 from api.services.job_service import JobService
 
@@ -22,7 +23,16 @@ async def list_jobs(
     limit: int = Query(20, ge=1, le=100),
 ):
     """List all scraping jobs with optional filtering."""
-    return await JobService.list_jobs(status=status, tags=tags, skip=skip, limit=limit)
+    cache_key = f"jobs:list:{status}:{','.join(tags or [])}:{skip}:{limit}"
+    cached = await jobs_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    result = await JobService.list_jobs(
+        status=status, tags=tags, skip=skip, limit=limit
+    )
+    await jobs_cache.set(cache_key, result)
+    return result
 
 
 @router.get("/{job_id}", response_model=ScrapingJobInDB)
