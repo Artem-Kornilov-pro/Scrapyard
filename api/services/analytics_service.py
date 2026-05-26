@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from api.core.database import db
 from api.core.cache import analytics_cache
+from api.core.database import db
 
 
 class AnalyticsService:
