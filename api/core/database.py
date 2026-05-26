@@ -52,7 +52,8 @@ async def connect_to_mongo():
 
     # Indexes for scraped_results
     await db.scraped_results.create_index("job_id")
-    await db.scraped_results.create_index([("job_id", ASCENDING), ("timestamp", ASCENDING)])
+    await db.scraped_results.create_index(
+        [("job_id", ASCENDING), ("timestamp", ASCENDING)])
 
         # Drop existing timestamp indexes to avoid conflicts
     try:
