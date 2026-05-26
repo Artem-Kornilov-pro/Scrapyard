@@ -24,7 +24,7 @@ class RedisCache:
         if self._redis:
             await self._redis.close()
 
-    async def get[T](self, key: str, default: T | None = None) -> T | None:
+    async def get(self, key: str, default: Any = None) -> Any:
         """Get value from cache."""
         if not self._redis:
             return default
@@ -58,6 +58,5 @@ class RedisCache:
             await self._redis.delete(*keys)
 
 
-# Cache instances with different TTLs
-analytics_cache = RedisCache(ttl=300)   # 5 minutes
-jobs_cache = RedisCache(ttl=60)         # 1 minute
+analytics_cache = RedisCache(ttl=300)
+jobs_cache = RedisCache(ttl=60)
