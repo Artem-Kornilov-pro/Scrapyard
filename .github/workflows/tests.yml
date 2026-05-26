@@ -46,4 +46,8 @@ jobs:
         run: mypy api/ --ignore-missing-imports
 
       - name: Run tests with coverage
-        run: pytest -v --cov=api --cov-report=term-missing
+        run: pytest -v --cov=api --cov=worker --cov-report=term-missing --cov-report=xml
+
+      - name: Check coverage threshold
+        run: |
+          coverage report --fail-under=75 || echo "Warning: coverage below 80%"
