@@ -1,8 +1,8 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from worker.engines.parsers.generic import parse_with_selectors, TRANSFORMS
+import pytest
 
+from worker.engines.parsers.generic import TRANSFORMS, parse_with_selectors
 
 VALID_SELECTORS = {
     "items": "div.product",

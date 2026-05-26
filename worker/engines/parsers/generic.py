@@ -2,7 +2,6 @@ from typing import Any
 
 from playwright.async_api import Page
 
-
 TRANSFORMS: dict[str, Any] = {
     "strip_currency": lambda v: float(
         str(v).replace("$", "").replace(" USD", "").replace(",", "").strip()
