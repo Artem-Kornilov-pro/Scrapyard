@@ -1,6 +1,4 @@
-### Файл 3: `CONTRIBUTING.md`
 
-```markdown
 # Contributing to Scrapyard
 
 ## Branching Strategy
@@ -43,6 +41,3 @@ cd scrapyard
 cp .env.example .env
 docker-compose up -d
 ```
-```
-
----
