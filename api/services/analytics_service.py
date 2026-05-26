@@ -165,7 +165,6 @@ class AnalyticsService:
         active_jobs = await db.scraping_jobs.count_documents({"status": "active"})
         paused_jobs = await db.scraping_jobs.count_documents({"status": "paused"})
         error_jobs = await db.scraping_jobs.count_documents({"status": "error"})
-
         total_results = await db.scraped_results.count_documents({})
 
         return {
