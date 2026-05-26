@@ -148,11 +148,10 @@ class AnalyticsService:
         ]
 
         cursor = db.scraped_results.aggregate(pipeline)
-        results = await cursor.to_list(length=1)
+        results: list[dict[str, Any]] = await cursor.to_list(length=1)
         if results:
             return results[0]
-        else:
-            return {"total": 0, "successes": 0, "failures": 0, "success_rate": 0}
+        return {"total": 0, "successes": 0, "failures": 0, "success_rate": 0}
 
 
     @staticmethod
