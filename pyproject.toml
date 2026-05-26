@@ -1,0 +1,23 @@
+[project]
+name = "scrapyard"
+version = "1.0.0"
+description = "Web Scraper as a Service — distributed scraping platform"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["api/tests", "worker/tests"]
+python_files = "test_*.py"
+addopts = "-v"

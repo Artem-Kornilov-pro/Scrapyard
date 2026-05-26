@@ -1,0 +1,58 @@
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: scrapyard-mongodb-prod
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: scrapyard
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: scrapyard-redis-prod
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: scrapyard-api-prod
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    depends_on:
+      - mongodb
+      - redis
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker
+    container_name: scrapyard-worker-prod
+    env_file:
+      - .env
+    depends_on:
+      - mongodb
+      - redis
+    restart: unless-stopped
+
+  beat:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.beat
+    container_name: scrapyard-beat-prod
+    env_file:
+      - .env
+    depends_on:
+      - mongodb
+      - redis
+    restart: unless-stopped
+
+volumes:
+  mongodb_data:
+  redis_data:
