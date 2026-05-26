@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from api.core.database import close_mongo_connection, connect_to_mongo
-from api.routes import jobs
+from api.routes import analytics, jobs
 
 
 @asynccontextmanager
@@ -23,6 +23,7 @@ app = FastAPI(
 
 # Routes
 app.include_router(jobs.router)
+app.include_router(analytics.router)
 
 
 @app.get("/health")
