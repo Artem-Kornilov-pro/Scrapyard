@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
-from typing import Any
+from datetime import datetime, timedelta, UTC
+from typing import Any, cast
 
-from api.core.cache import analytics_cache
 from api.core.database import db
+from api.core.cache import analytics_cache
 
 
 class AnalyticsService:
@@ -14,7 +14,7 @@ class AnalyticsService:
     async def get_job_stats(job_id: str, days: int = 30) -> list[dict[str, Any]]:
         """Get daily statistics for a job."""
         cache_key = f"analytics:job_stats:{job_id}:{days}"
-        cached = await analytics_cache.get(cache_key)
+        cached: list[dict[str, Any]] | None = await analytics_cache.get(cache_key)
         if cached is not None:
             return cached
 
@@ -55,13 +55,13 @@ class AnalyticsService:
         cursor = db.scraped_results.aggregate(pipeline)
         result = await cursor.to_list(length=None)
         await analytics_cache.set(cache_key, result)
-        return result
+        return cast(list[dict[str, Any]], result)
 
     @staticmethod
     async def get_slowest_jobs(limit: int = 5) -> list[dict[str, Any]]:
         """Get top N slowest active jobs."""
         cache_key = f"analytics:slowest:{limit}"
-        cached = await analytics_cache.get(cache_key)
+        cached: list[dict[str, Any]] | None = await analytics_cache.get(cache_key)
         if cached is not None:
             return cached
 
@@ -101,13 +101,13 @@ class AnalyticsService:
         cursor = db.scraped_results.aggregate(pipeline)
         result = await cursor.to_list(length=None)
         await analytics_cache.set(cache_key, result)
-        return result
+        return cast(list[dict[str, Any]], result)
 
     @staticmethod
     async def get_success_rate(days: int = 7) -> dict[str, Any]:
         """Get overall success rate."""
         cache_key = f"analytics:success_rate:{days}"
-        cached = await analytics_cache.get(cache_key)
+        cached: dict[str, Any] | None = await analytics_cache.get(cache_key)
         if cached is not None:
             return cached
 
@@ -167,24 +167,26 @@ class AnalyticsService:
         ]
 
         cursor = db.scraped_results.aggregate(pipeline)
-        results: list[dict[str, Any]] = await cursor.to_list(length=1)
+        results = await cursor.to_list(length=1)
         result = results[0] if results else {
-            "total": 0, "successes": 0, "failures": 0, "success_rate": 0
-            }
+            "total": 0, "successes": 0, "failures": 0, "success_rate": 0,
+        }
         await analytics_cache.set(cache_key, result)
-        return result
+        return cast(dict[str, Any], result)
 
     @staticmethod
     async def get_overview() -> dict[str, Any]:
         """Get overall system overview."""
         cache_key = "analytics:overview"
-        cached = await analytics_cache.get(cache_key)
+        cached: dict[str, Any] | None = await analytics_cache.get(cache_key)
         if cached is not None:
             return cached
 
         if db.scraping_jobs is None or db.scraped_results is None:
-            return {"total_jobs": 0, "active_jobs": 0,
-                     "paused_jobs": 0, "error_jobs": 0, "total_results": 0}
+            return {
+                "total_jobs": 0, "active_jobs": 0,
+                "paused_jobs": 0, "error_jobs": 0, "total_results": 0,
+            }
 
         total_jobs = await db.scraping_jobs.count_documents({})
         active_jobs = await db.scraping_jobs.count_documents({"status": "active"})
@@ -192,7 +194,7 @@ class AnalyticsService:
         error_jobs = await db.scraping_jobs.count_documents({"status": "error"})
         total_results = await db.scraped_results.count_documents({})
 
-        result = {
+        result: dict[str, Any] = {
             "total_jobs": total_jobs,
             "active_jobs": active_jobs,
             "paused_jobs": paused_jobs,
