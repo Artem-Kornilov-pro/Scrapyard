@@ -5,8 +5,8 @@ from celery.utils.log import get_task_logger
 from croniter import croniter  # type: ignore[import-untyped]
 
 from api.core.database import db
-from worker.tasks.scraper import scrape_job
 from worker.celery_app import app
+from worker.tasks.scraper import scrape_job
 
 logger = get_task_logger(__name__)
 
