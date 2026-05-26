@@ -1,17 +1,23 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
-# Установка зависимостей
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Установка системных зависимостей для Playwright
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    fonts-unifont \
+    fonts-freefont-ttf \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Установка Playwright браузеров
-RUN playwright install --with-deps chromium
+# Установка Playwright без системных зависимостей (мы их уже поставили)
+RUN playwright install chromium
+RUN playwright install-deps chromium || true
 
-# Копирование кода
-COPY worker/ ./worker/
-COPY api/ ./api/
+COPY . .
 
-# Запуск Celery worker
 CMD ["celery", "-A", "worker.celery_app", "worker", "--loglevel=info"]
