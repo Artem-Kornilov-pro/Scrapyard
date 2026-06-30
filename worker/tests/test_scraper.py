@@ -125,3 +125,73 @@ class TestScrapeJob:
             {"job_id": "test-job-123"},
             {"$inc": {"consecutive_failures": 1}},
         )
+
+
+class TestScrapeJobPagination:
+    """Tests that scrape_job wires pagination into the scraping run."""
+
+    @pytest.mark.asyncio
+    async def test_url_pagination_merges_items_from_all_pages(
+        self, mock_db, mock_engine, mock_parser
+    ):
+        """First page items plus paginated items end up in the result."""
+        job_config = {
+            **VALID_JOB_CONFIG,
+            "settings": {
+                "pagination": {"type": "url", "max_pages": 2},
+            },
+        }
+        task = MagicMock()
+
+        with patch(
+            "worker.tasks.scraper.handle_pagination",
+            new=AsyncMock(return_value=[{"title": "Product 3"}]),
+        ) as mock_handle_pagination:
+            result = await _run_scrape(task, job_config)
+
+        mock_handle_pagination.assert_called_once()
+        assert result["items_count"] == 3
+
+        call_args = mock_db.scraped_results.insert_one.call_args[0][0]
+        assert call_args["items_count"] == 3
+        assert call_args["metadata"]["pages_processed"] == 2
+
+    @pytest.mark.asyncio
+    async def test_scroll_pagination_uses_final_page_state(
+        self, mock_db, mock_engine, mock_parser
+    ):
+        """Scroll pagination replaces the first-page parse, not adds to it."""
+        job_config = {
+            **VALID_JOB_CONFIG,
+            "settings": {
+                "pagination": {"type": "scroll", "max_pages": 5},
+            },
+        }
+        task = MagicMock()
+
+        with patch(
+            "worker.tasks.scraper.handle_pagination",
+            new=AsyncMock(
+                return_value=[{"title": "Product 1"}, {"title": "Product 2"}]
+            ),
+        ) as mock_handle_pagination:
+            result = await _run_scrape(task, job_config)
+
+        mock_handle_pagination.assert_called_once()
+        mock_parser.assert_not_called()
+        assert result["items_count"] == 2
+
+    @pytest.mark.asyncio
+    async def test_no_pagination_type_skips_handle_pagination(
+        self, mock_db, mock_engine, mock_parser
+    ):
+        """Jobs without a pagination type fall back to a single parse."""
+        task = MagicMock()
+
+        with patch(
+            "worker.tasks.scraper.handle_pagination", new=AsyncMock()
+        ) as mock_handle_pagination:
+            result = await _run_scrape(task, VALID_JOB_CONFIG)
+
+        mock_handle_pagination.assert_not_called()
+        assert result["items_count"] == 2

@@ -8,6 +8,7 @@ from celery.utils.log import get_task_logger
 from api.core.database import connect_to_mongo, db
 from worker.celery_app import app
 from worker.engines.parsers.generic import parse_with_selectors
+from worker.engines.parsers.pagination import handle_pagination
 from worker.engines.playwright_engine import PlaywrightEngine
 
 logger = get_task_logger(__name__)
@@ -57,12 +58,30 @@ async def _run_scrape(
         "timestamp": start_time,
     })
 
+    selectors = job_config["selectors"]
+    pagination_config = (job_config.get("settings") or {}).get(
+        "pagination"
+    ) or {}
+    pagination_type = pagination_config.get("type")
+    max_pages = pagination_config.get("max_pages", 1)
+
     try:
         async with PlaywrightEngine(headless=True) as engine:
             await engine.navigate(job_config["url"])
-            items = await parse_with_selectors(
-                engine._page, job_config["selectors"]
-            )
+
+            if pagination_type == "scroll":
+                # Scrolling accumulates content into the same page, so the
+                # full result is parsed once after scrolling settles.
+                items = await handle_pagination(
+                    engine._page, pagination_config, selectors, max_pages
+                )
+            elif pagination_type in ("url", "click"):
+                items = await parse_with_selectors(engine._page, selectors)
+                items += await handle_pagination(
+                    engine._page, pagination_config, selectors, max_pages
+                )
+            else:
+                items = await parse_with_selectors(engine._page, selectors)
 
         duration_ms = int(
             (datetime.now(UTC) - start_time).total_seconds() * 1000
@@ -76,7 +95,7 @@ async def _run_scrape(
             "items": items,
             "metadata": {
                 "duration_ms": duration_ms,
-                "pages_processed": 1,
+                "pages_processed": max_pages if pagination_type else 1,
                 "status": "success",
                 "error_message": None,
             },
