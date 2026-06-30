@@ -20,6 +20,8 @@
 - ⚡ **Кэширование Redis** — аналитика кэшируется на 5 мин, списки задач на 1 мин
 - 🔐 **API-ключи и rate limiting** — опциональный заголовок `X-API-Key`, лимиты на Redis по IP
 - 🤖 **Этика парсинга** — учитывает `robots.txt`, троттлинг запросов по домену
+- 📈 **Grafana + Prometheus** — дашборд с метриками запросов/латентности/ошибок и Redis, auto-provisioned
+- 🛡️ **Глобальный обработчик 500** — все непойманные исключения логируются с трейсбеком, клиент получает безопасный JSON
 - 🐳 **Docker** — запуск всех сервисов одной командой
 
 ---
@@ -77,7 +79,14 @@ cp .env.example .env
 docker-compose up -d
 ```
 
-API доступно на `http://localhost:8000/docs`
+| Сервис | URL |
+|--------|-----|
+| API (Swagger UI) | `http://localhost:8000/docs` |
+| Prometheus-метрики | `http://localhost:8000/metrics` |
+| Prometheus UI | `http://localhost:9090` |
+| Grafana | `http://localhost:3000` (admin / admin) |
+
+Дашборд "Scrapyard Overview" подхватывается автоматически через provisioning. Показывает частоту запросов по статусам, P95-латентность, частоту ошибок и метрики Redis.
 
 ---
 

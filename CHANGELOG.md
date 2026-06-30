@@ -2,7 +2,14 @@
 
 ## [Unreleased]
 
-### Added
+### Added (observability + error handling)
+- `GET /metrics` — Prometheus scrape target with request count/latency histogram by route template and status code; implemented as a pure ASGI middleware to avoid interference with exception handling
+- `docker/prometheus.yml` — scrape config for the API and redis-exporter
+- Prometheus + Grafana + redis-exporter services in `docker-compose.yml` and `docker-compose.prod.yml`; Grafana auto-provisions its datasource and a "Scrapyard Overview" dashboard via provisioning files (request rate, P95 latency, error rate, Redis memory/clients)
+- Global 500 exception handler in `api/core/errors.py` — all unhandled exceptions are logged with full tracebacks; the JSON response body includes the exception message only when `DEBUG=true`, so production responses never leak internals
+- `prometheus_client==0.25.0` added to `requirements.txt`
+
+### Added (job utility endpoints)
 - `POST /api/v1/jobs/dry-run` — test selectors against a live page without saving a job
 - `POST /api/v1/jobs/{id}/run` — dispatch a job immediately, bypassing its cron schedule
 - `GET /api/v1/jobs/{id}/results` — list a job's scrape results

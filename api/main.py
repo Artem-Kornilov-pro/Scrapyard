@@ -4,6 +4,8 @@ from fastapi import FastAPI
 
 from api.core.cache import analytics_cache, jobs_cache, rate_limit_cache
 from api.core.database import close_mongo_connection, connect_to_mongo
+from api.core.errors import unhandled_exception_handler
+from api.core.metrics import PrometheusMiddleware, metrics_endpoint
 from api.routes import analytics, jobs, logs, results
 
 
@@ -28,11 +30,21 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_exception_handler(Exception, unhandled_exception_handler)
+app.add_middleware(PrometheusMiddleware)
+
 # Routes
 app.include_router(jobs.router)
 app.include_router(analytics.router)
 app.include_router(logs.router)
 app.include_router(results.router)
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus scrape target. Unauthenticated like /health — intended
+    to sit behind network-level access control, not an API key."""
+    return await metrics_endpoint()
 
 
 @app.get("/health")
