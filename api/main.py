@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from api.core.cache import analytics_cache, jobs_cache, rate_limit_cache
 from api.core.database import close_mongo_connection, connect_to_mongo
 from api.routes import analytics, jobs, logs
 
@@ -10,7 +11,13 @@ from api.routes import analytics, jobs, logs
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
     await connect_to_mongo()
+    await jobs_cache.connect()
+    await analytics_cache.connect()
+    await rate_limit_cache.connect()
     yield
+    await jobs_cache.disconnect()
+    await analytics_cache.disconnect()
+    await rate_limit_cache.disconnect()
     await close_mongo_connection()
 
 

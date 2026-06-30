@@ -1,12 +1,18 @@
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.core.cache import jobs_cache
+from api.core.rate_limit import enforce_rate_limit
+from api.core.security import verify_api_key
 from api.models.job import ScrapingJobCreate, ScrapingJobInDB, ScrapingJobUpdate
 from api.services.job_service import JobService
 
-router = APIRouter(prefix="/api/v1/jobs", tags=["jobs"])
+router = APIRouter(
+    prefix="/api/v1/jobs",
+    tags=["jobs"],
+    dependencies=[Depends(verify_api_key), Depends(enforce_rate_limit)],
+)
 
 
 @router.post("", response_model=ScrapingJobInDB, status_code=201)
