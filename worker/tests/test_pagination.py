@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -8,6 +8,8 @@ from worker.engines.parsers.pagination import (
     _handle_url_pagination,
     handle_pagination,
 )
+
+SELECTORS = {"items": "div.item", "fields": {"title": {"selector": "h3"}}}
 
 
 @pytest.fixture
@@ -167,3 +169,109 @@ class TestScrollPagination:
 
         # 1 итерация × 3 вызова = 3
         assert mock_page.evaluate.call_count == 3
+
+
+class TestPaginationCollectsItems:
+    """Tests that pagination handlers actually parse and return items.
+
+    Regression coverage for the bug where handlers navigated/clicked/
+    scrolled but always returned an empty list.
+    """
+
+    @pytest.mark.asyncio
+    async def test_url_pagination_collects_items_per_page(self, mock_page):
+        """Each navigated page is parsed and items are accumulated."""
+        with patch(
+            "worker.engines.parsers.pagination.parse_with_selectors",
+            new=AsyncMock(side_effect=[
+                [{"title": "A"}],
+                [{"title": "B"}],
+                [{"title": "C"}],
+            ]),
+        ) as mock_parse:
+            result = await _handle_url_pagination(
+                mock_page,
+                {"param": "page", "start_page": 1},
+                SELECTORS,
+                max_pages=3,
+            )
+
+        assert result == [{"title": "A"}, {"title": "B"}, {"title": "C"}]
+        assert mock_parse.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_url_pagination_without_selectors_skips_parsing(
+        self, mock_page
+    ):
+        """No selectors means no parsing — preserves navigate-only mode."""
+        with patch(
+            "worker.engines.parsers.pagination.parse_with_selectors",
+            new=AsyncMock(),
+        ) as mock_parse:
+            result = await _handle_url_pagination(
+                mock_page, {"param": "page"}, None, max_pages=2
+            )
+
+        assert result == []
+        mock_parse.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_click_pagination_collects_items_per_page(self, mock_page):
+        """Each page reached by clicking 'next' is parsed."""
+        mock_button = MagicMock()
+        mock_button.click = AsyncMock()
+        mock_button.get_attribute = AsyncMock(return_value=None)
+        mock_page.query_selector.return_value = mock_button
+
+        with patch(
+            "worker.engines.parsers.pagination.parse_with_selectors",
+            new=AsyncMock(side_effect=[
+                [{"title": "A"}],
+                [{"title": "B"}],
+            ]),
+        ) as mock_parse:
+            result = await _handle_click_pagination(
+                mock_page, {"next_selector": ".next"}, SELECTORS, max_pages=2
+            )
+
+        assert result == [{"title": "A"}, {"title": "B"}]
+        assert mock_parse.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_scroll_pagination_parses_once_after_settling(
+        self, mock_page
+    ):
+        """Scroll accumulates DOM content, so it's parsed once at the end."""
+        heights = iter([1000, None, 1000])
+        mock_page.evaluate = AsyncMock(
+            side_effect=lambda *args, **kwargs: next(heights)
+        )
+
+        with patch(
+            "worker.engines.parsers.pagination.parse_with_selectors",
+            new=AsyncMock(return_value=[{"title": "A"}, {"title": "B"}]),
+        ) as mock_parse:
+            result = await _handle_scroll_pagination(
+                mock_page, {}, SELECTORS, max_pages=10
+            )
+
+        assert result == [{"title": "A"}, {"title": "B"}]
+        mock_parse.assert_called_once_with(mock_page, SELECTORS)
+
+    @pytest.mark.asyncio
+    async def test_handle_pagination_passes_selectors_through(
+        self, mock_page
+    ):
+        """The public dispatcher forwards selectors to the url handler."""
+        with patch(
+            "worker.engines.parsers.pagination.parse_with_selectors",
+            new=AsyncMock(return_value=[{"title": "A"}]),
+        ):
+            result = await handle_pagination(
+                mock_page,
+                {"type": "url", "param": "page"},
+                SELECTORS,
+                max_pages=1,
+            )
+
+        assert result == [{"title": "A"}]

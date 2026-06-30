@@ -2,10 +2,13 @@ from typing import Any
 
 from playwright.async_api import Page
 
+from worker.engines.parsers.generic import parse_with_selectors
+
 
 async def handle_pagination(
     page: Page,
     pagination_config: dict[str, Any],
+    selectors: dict[str, Any] | None = None,
     max_pages: int = 10,
 ) -> list[dict[str, Any]]:
     """Handle pagination and collect items from multiple pages.
@@ -13,24 +16,26 @@ async def handle_pagination(
     Args:
         page: Playwright Page object.
         pagination_config: Config with type and optional param/selector.
+        selectors: CSS selectors config used to parse each visited page.
+            If omitted, pages are navigated/clicked/scrolled but not parsed.
         max_pages: Maximum number of pages to scrape.
 
     Returns:
-        List of collected elements from all pages.
+        List of collected elements from all visited pages.
     """
     pagination_type = pagination_config.get("type")
 
     if pagination_type == "url":
         return await _handle_url_pagination(
-            page, pagination_config, max_pages
+            page, pagination_config, selectors, max_pages
         )
     elif pagination_type == "click":
         return await _handle_click_pagination(
-            page, pagination_config, max_pages
+            page, pagination_config, selectors, max_pages
         )
     elif pagination_type == "scroll":
         return await _handle_scroll_pagination(
-            page, pagination_config, max_pages
+            page, pagination_config, selectors, max_pages
         )
 
     # No pagination
@@ -40,7 +45,8 @@ async def handle_pagination(
 async def _handle_url_pagination(
     page: Page,
     config: dict[str, Any],
-    max_pages: int,
+    selectors: dict[str, Any] | None = None,
+    max_pages: int = 10,
 ) -> list[dict[str, Any]]:
     """Handle URL-based pagination (?page=1, ?page=2, ...)."""
     param = config.get("param", "page")
@@ -58,13 +64,17 @@ async def _handle_url_pagination(
         page_url = f"{current_url}{separator}{param}={page_num}"
         await page.goto(page_url, wait_until="networkidle")
 
+        if selectors:
+            all_elements.extend(await parse_with_selectors(page, selectors))
+
     return all_elements
 
 
 async def _handle_click_pagination(
     page: Page,
     config: dict[str, Any],
-    max_pages: int,
+    selectors: dict[str, Any] | None = None,
+    max_pages: int = 10,
 ) -> list[dict[str, Any]]:
     """Handle click-based pagination (Next button)."""
     next_selector = config.get("next_selector", "a.next")
@@ -83,6 +93,11 @@ async def _handle_click_pagination(
             await next_button.click()
             await page.wait_for_load_state("networkidle")
 
+            if selectors:
+                all_elements.extend(
+                    await parse_with_selectors(page, selectors)
+                )
+
         except Exception:
             break
 
@@ -92,11 +107,14 @@ async def _handle_click_pagination(
 async def _handle_scroll_pagination(
     page: Page,
     config: dict[str, Any],
-    max_pages: int,
+    selectors: dict[str, Any] | None = None,
+    max_pages: int = 10,
 ) -> list[dict[str, Any]]:
-    """Handle infinite scroll pagination."""
-    all_elements: list[dict[str, Any]] = []
+    """Handle infinite scroll pagination.
 
+    New items are appended to the same DOM rather than replacing it, so
+    the page is parsed once after scrolling settles instead of per step.
+    """
     for _ in range(max_pages):
         previous_height = await page.evaluate(
             "document.body.scrollHeight"
@@ -112,4 +130,6 @@ async def _handle_scroll_pagination(
         if new_height == previous_height:
             break
 
-    return all_elements
+    if selectors:
+        return await parse_with_selectors(page, selectors)
+    return []
