@@ -1,8 +1,14 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
 from api.core.database import db
+from api.core.rate_limit import enforce_rate_limit
+from api.core.security import verify_api_key
 
-router = APIRouter(prefix="/api/v1", tags=["logs"])
+router = APIRouter(
+    prefix="/api/v1",
+    tags=["logs"],
+    dependencies=[Depends(verify_api_key), Depends(enforce_rate_limit)],
+)
 
 
 @router.get("/jobs/{job_id}/logs")

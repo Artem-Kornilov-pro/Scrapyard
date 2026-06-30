@@ -19,6 +19,8 @@ Distributed web scraping platform. Schedule scraping jobs via REST API, execute 
 - 📊 **Analytics** — MongoDB aggregations for per-job statistics
 - 🔄 **Auto-cleanup** — TTL indexes for old results
 - ⚡ **Redis caching** — analytics cached for 5min, job lists for 1min
+- 🔐 **API key auth & rate limiting** — optional `X-API-Key` header, Redis-backed per-IP limits
+- 🤖 **Scraping etiquette** — respects `robots.txt`, throttles concurrent requests per domain
 - 🐳 **Docker** — one-command startup for all services
 
 ---
@@ -77,6 +79,27 @@ docker-compose up -d
 ```
 
 API available at `http://localhost:8000/docs`
+
+---
+
+## 🔒 Production checklist
+
+These are off by default for a frictionless local setup, but should be configured before exposing the API publicly:
+
+| Setting | Default | Effect |
+|---------|---------|--------|
+| `API_KEY` | unset (auth disabled) | When set, every `/api/v1/*` request must send a matching `X-API-Key` header |
+| `RATE_LIMIT_PER_MINUTE` | `120` | Per-IP request limit on `/api/v1/*`, backed by Redis; `0` disables it |
+| `RESPECT_ROBOTS_TXT` | `true` | Worker checks the target site's `robots.txt` before scraping and skips disallowed URLs |
+| `DOMAIN_THROTTLE_SECONDS` | `2.0` | Minimum gap between scrape requests to the same domain, enforced across all workers via a Redis lock |
+| `SCRAPER_USER_AGENT` | `ScrapyardBot/1.0 (+https://github.com/...)` | User-Agent sent by the browser and matched against `robots.txt` rules |
+
+Redis-backed features (caching, rate limiting, domain throttling) fail open: if Redis is unreachable, the API and workers keep running without that protection rather than going down. `/health` is never authenticated or rate-limited, so orchestrators can always probe it.
+
+```bash
+# with API_KEY set
+curl http://localhost:8000/api/v1/jobs -H "X-API-Key: <your-key>"
+```
 
 ---
 

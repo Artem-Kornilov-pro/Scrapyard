@@ -1,8 +1,14 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
+from api.core.rate_limit import enforce_rate_limit
+from api.core.security import verify_api_key
 from api.services.analytics_service import AnalyticsService
 
-router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
+router = APIRouter(
+    prefix="/api/v1/analytics",
+    tags=["analytics"],
+    dependencies=[Depends(verify_api_key), Depends(enforce_rate_limit)],
+)
 
 
 @router.get("/jobs/{job_id}/stats")

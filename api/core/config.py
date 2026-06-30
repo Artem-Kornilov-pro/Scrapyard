@@ -23,5 +23,20 @@ class Settings(BaseSettings):
     # Debug
     debug: bool = False
 
+    # Security
+    # Empty string disables auth (local dev / tests). Set in production to
+    # require the X-API-Key header on every /api/v1 request.
+    api_key: str = ""
+    rate_limit_per_minute: int = 120
+
+    # Scraping etiquette
+    scraper_user_agent: str = (
+        "ScrapyardBot/1.0 (+https://github.com/Artem-Kornilov-pro/scrapyard)"
+    )
+    respect_robots_txt: bool = True
+    # Minimum seconds between scrape requests to the same domain, enforced
+    # across all workers via a Redis lock. 0 disables throttling.
+    domain_throttle_seconds: float = 2.0
+
 
 settings = Settings()
