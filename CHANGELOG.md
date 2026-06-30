@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- `POST /api/v1/jobs/dry-run` — test selectors against a live page without saving a job
+- `POST /api/v1/jobs/{id}/run` — dispatch a job immediately, bypassing its cron schedule
+- `GET /api/v1/jobs/{id}/results` — list a job's scrape results
+- `GET /api/v1/jobs/{id}/results/export` — export a run's items as JSON or CSV
+- `GET /api/v1/jobs/{id}/results/diff` — diff two runs (defaults to the two most recent); per-field diffing when a job sets `diff_key`
+- Webhook notifications (`notify_webhook` on a job) fire when a job hits 5 consecutive failures and is marked `error`
+
+### Fixed
+- `parse_with_selectors` called Playwright's `ElementHandle.inner_text()`/`get_attribute()` with a selector argument they don't accept — every field extraction with `attr: "text"` (or any non-default attribute) silently failed in real scraping. Now resolves each field's sub-element via `query_selector()` first.
+- `sync_scheduled_jobs` and the new `run_now` both passed a raw MongoDB document (including the non-JSON-serializable `_id` ObjectId) straight into a Celery task payload
+- `GET /api/v1/logs` and `GET /api/v1/jobs/{id}/logs` returned raw MongoDB documents including `_id`, which FastAPI can't serialize
+
 ## [1.0.0] — 2026-05-26
 
 ### Initial Release

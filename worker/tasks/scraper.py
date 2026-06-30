@@ -10,9 +10,9 @@ from api.core.cache import domain_throttle_cache
 from api.core.config import settings
 from api.core.database import connect_to_mongo, db
 from worker.celery_app import app
-from worker.engines.parsers.generic import parse_with_selectors
-from worker.engines.parsers.pagination import handle_pagination
+from worker.engines.parsers.pagination import collect_page_items
 from worker.engines.playwright_engine import PlaywrightEngine
+from worker.utils.notify import send_webhook_notification
 from worker.utils.robots import is_allowed
 from worker.utils.throttle import acquire_domain_slot, extract_domain
 
@@ -108,20 +108,9 @@ async def _run_scrape(
             headless=True, user_agent=settings.scraper_user_agent
         ) as engine:
             await engine.navigate(job_config["url"])
-
-            if pagination_type == "scroll":
-                # Scrolling accumulates content into the same page, so the
-                # full result is parsed once after scrolling settles.
-                items = await handle_pagination(
-                    engine._page, pagination_config, selectors, max_pages
-                )
-            elif pagination_type in ("url", "click"):
-                items = await parse_with_selectors(engine._page, selectors)
-                items += await handle_pagination(
-                    engine._page, pagination_config, selectors, max_pages
-                )
-            else:
-                items = await parse_with_selectors(engine._page, selectors)
+            items = await collect_page_items(
+                engine._page, selectors, pagination_config
+            )
 
         duration_ms = int(
             (datetime.now(UTC) - start_time).total_seconds() * 1000
@@ -188,11 +177,24 @@ async def _run_scrape(
             {"$inc": {"consecutive_failures": 1}},
         )
 
-        job_doc = await db.scraping_jobs.find_one({"job_id": job_id})
+        job_doc = await db.scraping_jobs.find_one(
+            {"job_id": job_id}, {"_id": 0}
+        )
         if job_doc and job_doc.get("consecutive_failures", 0) >= 5:
             await db.scraping_jobs.update_one(
                 {"job_id": job_id},
                 {"$set": {"status": "error"}},
             )
+            webhook_url = job_doc.get("notify_webhook")
+            if webhook_url:
+                await send_webhook_notification(webhook_url, {
+                    "event": "job.error",
+                    "job_id": job_id,
+                    "job_name": job_doc.get("name"),
+                    "url": job_doc.get("url"),
+                    "consecutive_failures": job_doc["consecutive_failures"],
+                    "last_error": type(exc).__name__,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                })
 
         raise self.retry(exc=exc)

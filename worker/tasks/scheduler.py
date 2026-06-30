@@ -32,10 +32,13 @@ async def sync_scheduled_jobs(celery_app: Celery) -> int:
     now = datetime.now(UTC)
     dispatched = 0
 
-    cursor = db.scraping_jobs.find({
-        "status": "active",
-        "next_run": {"$lte": now},
-    })
+    cursor = db.scraping_jobs.find(
+        {
+            "status": "active",
+            "next_run": {"$lte": now},
+        },
+        {"_id": 0},
+    )
 
     async for doc in cursor:
         job_id = doc["job_id"]

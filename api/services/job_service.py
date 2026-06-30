@@ -1,12 +1,20 @@
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
+from celery.exceptions import TimeoutError as CeleryTimeoutError
 from croniter import croniter  # type: ignore[import-untyped]
 
 from api.core.cache import analytics_cache, jobs_cache
+from api.core.config import settings
 from api.core.database import db
-from api.models.job import ScrapingJobCreate, ScrapingJobInDB, ScrapingJobUpdate
+from api.models.job import (
+    DryRunRequest,
+    ScrapingJobCreate,
+    ScrapingJobInDB,
+    ScrapingJobUpdate,
+)
 
 
 class JobService:
@@ -158,3 +166,39 @@ class JobService:
         cron: croniter = croniter(cron_expr, base_time)
         result: datetime = cron.get_next(datetime)
         return result
+
+    @staticmethod
+    async def run_now(job_id: str) -> dict[str, Any] | None:
+        """Dispatch a job to the worker immediately, bypassing its cron
+        schedule. Returns None if the job doesn't exist.
+        """
+        assert db.scraping_jobs is not None
+        job_doc = await db.scraping_jobs.find_one(
+            {"job_id": job_id}, {"_id": 0}
+        )
+        if not job_doc:
+            return None
+
+        from worker.tasks.scraper import scrape_job
+
+        async_result = scrape_job.delay(job_doc)
+        return {"job_id": job_id, "task_id": async_result.id, "status": "dispatched"}
+
+    @staticmethod
+    async def dry_run(payload: DryRunRequest) -> dict[str, Any] | None:
+        """Run selectors against a live page without creating a job.
+
+        Returns None if the worker doesn't respond within
+        `settings.dry_run_timeout_seconds`.
+        """
+        from worker.tasks.dry_run import dry_run_job
+
+        async_result = dry_run_job.delay(payload.model_dump())
+        try:
+            return await asyncio.to_thread(
+                async_result.get,
+                timeout=settings.dry_run_timeout_seconds,
+                propagate=False,
+            )
+        except CeleryTimeoutError:
+            return None

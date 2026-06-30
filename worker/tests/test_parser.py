@@ -27,13 +27,23 @@ def mock_page():
     return page
 
 
-@pytest.fixture
-def mock_element():
-    """Create a mock DOM element."""
-    el = MagicMock()
-    el.inner_text = AsyncMock()
-    el.get_attribute = AsyncMock()
-    return el
+def _mock_field_target(inner_text=None, attribute=None):
+    """Create a mock sub-element returned by element.query_selector()."""
+    target = MagicMock()
+    target.inner_text = AsyncMock(return_value=inner_text)
+    target.get_attribute = AsyncMock(return_value=attribute)
+    return target
+
+
+def _mock_item_element(field_targets: dict[str, MagicMock]):
+    """Create a mock item element whose query_selector(selector) returns
+    the matching sub-element from `field_targets` (keyed by selector).
+    """
+    element = MagicMock()
+    element.query_selector = AsyncMock(
+        side_effect=lambda selector: field_targets.get(selector)
+    )
+    return element
 
 
 class TestTransforms:
@@ -67,11 +77,12 @@ class TestParseWithSelectors:
     """Tests for parse_with_selectors function."""
 
     @pytest.mark.asyncio
-    async def test_parse_single_item(self, mock_page, mock_element):
+    async def test_parse_single_item(self, mock_page):
         """Test parsing a single item."""
-        mock_element.inner_text = AsyncMock(return_value="Test Product")
-        mock_element.get_attribute = AsyncMock(return_value="/product/1")
-        mock_page.query_selector_all.return_value = [mock_element]
+        element = _mock_item_element({
+            "h3": _mock_field_target(inner_text="Test Product"),
+        })
+        mock_page.query_selector_all.return_value = [element]
 
         results = await parse_with_selectors(mock_page, {
             "items": "div.product",
@@ -84,12 +95,37 @@ class TestParseWithSelectors:
         assert results[0]["title"] == "Test Product"
 
     @pytest.mark.asyncio
-    async def test_parse_multiple_items(self, mock_page, mock_element):
+    async def test_queries_field_selector_within_item_not_globally(
+        self, mock_page
+    ):
+        """Regression: fields must be looked up via the item element's
+        own query_selector(selector), not by passing the selector as an
+        argument to inner_text()/get_attribute() (which Playwright's
+        ElementHandle API doesn't accept).
+        """
+        target = _mock_field_target(inner_text="Test Product")
+        element = _mock_item_element({"h3": target})
+        mock_page.query_selector_all.return_value = [element]
+
+        await parse_with_selectors(mock_page, {
+            "items": "div.product",
+            "fields": {
+                "title": {"selector": "h3", "attr": "text"},
+            },
+        })
+
+        element.query_selector.assert_called_once_with("h3")
+        target.inner_text.assert_called_once_with()
+
+    @pytest.mark.asyncio
+    async def test_parse_multiple_items(self, mock_page):
         """Test parsing multiple items."""
-        el1 = MagicMock()
-        el1.inner_text = AsyncMock(return_value="Item 1")
-        el2 = MagicMock()
-        el2.inner_text = AsyncMock(return_value="Item 2")
+        el1 = _mock_item_element({
+            "h3": _mock_field_target(inner_text="Item 1"),
+        })
+        el2 = _mock_item_element({
+            "h3": _mock_field_target(inner_text="Item 2"),
+        })
 
         mock_page.query_selector_all.return_value = [el1, el2]
 
@@ -114,11 +150,12 @@ class TestParseWithSelectors:
         assert results == []
 
     @pytest.mark.asyncio
-    async def test_parse_with_transform(self, mock_page, mock_element):
+    async def test_parse_with_transform(self, mock_page):
         """Test parsing with transform function."""
-        mock_element.inner_text = AsyncMock(return_value="$19.99 USD")
-        mock_element.get_attribute = AsyncMock(return_value="/product/1")
-        mock_page.query_selector_all.return_value = [mock_element]
+        element = _mock_item_element({
+            "span": _mock_field_target(inner_text="$19.99 USD"),
+        })
+        mock_page.query_selector_all.return_value = [element]
 
         results = await parse_with_selectors(mock_page, {
             "items": "div.product",
@@ -135,10 +172,12 @@ class TestParseWithSelectors:
         assert results[0]["price"] == 19.99
 
     @pytest.mark.asyncio
-    async def test_parse_with_class_attr(self, mock_page, mock_element):
+    async def test_parse_with_class_attr(self, mock_page):
         """Test parsing class attribute."""
-        mock_element.get_attribute = AsyncMock(return_value="product in-stock")
-        mock_page.query_selector_all.return_value = [mock_element]
+        element = _mock_item_element({
+            "span": _mock_field_target(attribute="product in-stock"),
+        })
+        mock_page.query_selector_all.return_value = [element]
 
         results = await parse_with_selectors(mock_page, {
             "items": "div.product",
@@ -155,10 +194,12 @@ class TestParseWithSelectors:
         assert results[0]["status"] is True
 
     @pytest.mark.asyncio
-    async def test_parse_missing_attribute(self, mock_page, mock_element):
+    async def test_parse_missing_attribute(self, mock_page):
         """Test parsing when attribute returns None."""
-        mock_element.get_attribute = AsyncMock(return_value=None)
-        mock_page.query_selector_all.return_value = [mock_element]
+        element = _mock_item_element({
+            "a": _mock_field_target(attribute=None),
+        })
+        mock_page.query_selector_all.return_value = [element]
 
         results = await parse_with_selectors(mock_page, {
             "items": "div.product",
@@ -174,10 +215,29 @@ class TestParseWithSelectors:
         assert results[0]["url"] == ""
 
     @pytest.mark.asyncio
-    async def test_transform_error_returns_none(self, mock_page, mock_element):
+    async def test_parse_missing_sub_element(self, mock_page):
+        """Test that a field selector matching nothing within the item
+        yields an empty string instead of raising.
+        """
+        element = _mock_item_element({})  # no selectors resolve
+        mock_page.query_selector_all.return_value = [element]
+
+        results = await parse_with_selectors(mock_page, {
+            "items": "div.product",
+            "fields": {
+                "title": {"selector": "h3", "attr": "text"},
+            },
+        })
+
+        assert results[0]["title"] == ""
+
+    @pytest.mark.asyncio
+    async def test_transform_error_returns_none(self, mock_page):
         """Test that transform error sets value to None."""
-        mock_element.inner_text = AsyncMock(return_value="not-a-number")
-        mock_page.query_selector_all.return_value = [mock_element]
+        element = _mock_item_element({
+            "span": _mock_field_target(inner_text="not-a-number"),
+        })
+        mock_page.query_selector_all.return_value = [element]
 
         results = await parse_with_selectors(mock_page, {
             "items": "div.product",

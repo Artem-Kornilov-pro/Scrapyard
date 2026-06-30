@@ -4,7 +4,7 @@ from fastapi import FastAPI
 
 from api.core.cache import analytics_cache, jobs_cache, rate_limit_cache
 from api.core.database import close_mongo_connection, connect_to_mongo
-from api.routes import analytics, jobs, logs
+from api.routes import analytics, jobs, logs, results
 
 
 @asynccontextmanager
@@ -32,6 +32,7 @@ app = FastAPI(
 app.include_router(jobs.router)
 app.include_router(analytics.router)
 app.include_router(logs.router)
+app.include_router(results.router)
 
 
 @app.get("/health")

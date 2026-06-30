@@ -6,6 +6,7 @@ from worker.engines.parsers.pagination import (
     _handle_click_pagination,
     _handle_scroll_pagination,
     _handle_url_pagination,
+    collect_page_items,
     handle_pagination,
 )
 
@@ -275,3 +276,53 @@ class TestPaginationCollectsItems:
             )
 
         assert result == [{"title": "A"}]
+
+
+class TestCollectPageItems:
+    """Tests for the shared scrape+dry-run item collection helper."""
+
+    @pytest.mark.asyncio
+    async def test_no_pagination_config_parses_once(self, mock_page):
+        with patch(
+            "worker.engines.parsers.pagination.parse_with_selectors",
+            new=AsyncMock(return_value=[{"title": "A"}]),
+        ) as mock_parse:
+            result = await collect_page_items(mock_page, SELECTORS, None)
+
+        assert result == [{"title": "A"}]
+        mock_parse.assert_called_once_with(mock_page, SELECTORS)
+
+    @pytest.mark.asyncio
+    async def test_url_pagination_merges_first_page_and_extra_pages(
+        self, mock_page
+    ):
+        with patch(
+            "worker.engines.parsers.pagination.parse_with_selectors",
+            new=AsyncMock(return_value=[{"title": "first-page"}]),
+        ), patch(
+            "worker.engines.parsers.pagination.handle_pagination",
+            new=AsyncMock(return_value=[{"title": "extra-page"}]),
+        ):
+            result = await collect_page_items(
+                mock_page, SELECTORS, {"type": "url", "max_pages": 2}
+            )
+
+        assert result == [{"title": "first-page"}, {"title": "extra-page"}]
+
+    @pytest.mark.asyncio
+    async def test_scroll_pagination_uses_handle_pagination_result_only(
+        self, mock_page
+    ):
+        with patch(
+            "worker.engines.parsers.pagination.parse_with_selectors",
+            new=AsyncMock(),
+        ) as mock_parse, patch(
+            "worker.engines.parsers.pagination.handle_pagination",
+            new=AsyncMock(return_value=[{"title": "A"}, {"title": "B"}]),
+        ):
+            result = await collect_page_items(
+                mock_page, SELECTORS, {"type": "scroll", "max_pages": 5}
+            )
+
+        assert result == [{"title": "A"}, {"title": "B"}]
+        mock_parse.assert_not_called()

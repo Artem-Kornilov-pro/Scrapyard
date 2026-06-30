@@ -38,5 +38,9 @@ class Settings(BaseSettings):
     # across all workers via a Redis lock. 0 disables throttling.
     domain_throttle_seconds: float = 2.0
 
+    # How long the API waits for a worker to finish a dry run before
+    # giving up and returning 504.
+    dry_run_timeout_seconds: int = 30
+
 
 settings = Settings()
