@@ -1,0 +1,192 @@
+{
+  "title": "Scrapyard Overview",
+  "uid": "scrapyard-overview",
+  "version": 1,
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request Rate by Status",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 14, "h": 9 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum by(status) (rate(http_requests_total[1m]))",
+          "legendFormat": "HTTP {{ status }}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "fillOpacity": 10 },
+          "unit": "reqps"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byFrameRefID", "options": "A" },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      { "color": "green", "value": null }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": { "legend": { "calcs": ["last"], "displayMode": "list", "placement": "bottom" } }
+    },
+    {
+      "id": 2,
+      "title": "5xx Rate (last 5m)",
+      "type": "stat",
+      "gridPos": { "x": 14, "y": 0, "w": 5, "h": 4 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "round(sum(rate(http_requests_total{status=~\"5..\"}[5m])), 0.001)",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.001 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" }
+    },
+    {
+      "id": 3,
+      "title": "P95 Latency (last 5m)",
+      "type": "stat",
+      "gridPos": { "x": 19, "y": 0, "w": 5, "h": 4 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 0.5 },
+              { "color": "red", "value": 2 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" }
+    },
+    {
+      "id": 4,
+      "title": "Redis Status",
+      "type": "stat",
+      "gridPos": { "x": 14, "y": 4, "w": 5, "h": 5 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "redis_up",
+          "legendFormat": "Redis",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+          ]
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" }
+    },
+    {
+      "id": 5,
+      "title": "Redis Connected Clients",
+      "type": "stat",
+      "gridPos": { "x": 19, "y": 4, "w": 5, "h": 5 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "redis_connected_clients",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" }
+    },
+    {
+      "id": 6,
+      "title": "P50 / P95 Latency by Endpoint",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 9, "w": 14, "h": 9 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.50, sum by(path, le) (rate(http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p50 {{ path }}",
+          "refId": "A"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.95, sum by(path, le) (rate(http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95 {{ path }}",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "lineWidth": 2 }
+        }
+      },
+      "options": { "legend": { "calcs": ["last"], "displayMode": "table", "placement": "right" } }
+    },
+    {
+      "id": 7,
+      "title": "Redis Memory Used",
+      "type": "timeseries",
+      "gridPos": { "x": 14, "y": 9, "w": 10, "h": 9 },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "redis_memory_used_bytes",
+          "legendFormat": "Used",
+          "refId": "A"
+        },
+        {
+          "datasource": "Prometheus",
+          "expr": "redis_memory_max_bytes",
+          "legendFormat": "Max",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes", "custom": { "drawStyle": "line" } }
+      }
+    }
+  ]
+}

@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from api.core.config import settings
+
 
 @pytest.fixture
 def client():
@@ -87,3 +89,81 @@ class TestErrorHandling:
         client_obj, _ = client
         response = client_obj.get("/api/v1/jobs?limit=200")
         assert response.status_code == 422
+
+
+class TestGlobalExceptionHandler:
+    """Tests for the catch-all 500 handler.
+
+    Starlette re-raises the exception after calling the handler so that
+    middleware finalizers can run — TestClient catches this and re-raises
+    unless `raise_server_exceptions=False` is set. The unit-test approach
+    below calls the handler function directly to avoid this framework
+    wrapping and test only the handler's own logic.
+    """
+
+    @pytest.fixture(autouse=True)
+    def reset_debug(self):
+        original = settings.debug
+        yield
+        settings.debug = original
+
+    @pytest.mark.asyncio
+    async def test_returns_500_json_response(self):
+        from fastapi import Request
+
+        from api.core.errors import unhandled_exception_handler
+
+        scope = {"type": "http", "method": "GET", "path": "/api/v1/jobs/x",
+                 "query_string": b"", "headers": []}
+        request = Request(scope)
+        response = await unhandled_exception_handler(request, RuntimeError("boom"))
+
+        assert response.status_code == 500
+        import json
+        body = json.loads(response.body)
+        assert body["error"] == "internal_server_error"
+
+    @pytest.mark.asyncio
+    async def test_debug_false_hides_detail(self):
+        from fastapi import Request
+
+        from api.core.errors import unhandled_exception_handler
+
+        settings.debug = False
+        scope = {"type": "http", "method": "GET", "path": "/",
+                 "query_string": b"", "headers": []}
+        request = Request(scope)
+        response = await unhandled_exception_handler(
+            request, RuntimeError("sensitive internal detail")
+        )
+
+        import json
+        body = json.loads(response.body)
+        assert "sensitive internal detail" not in body["detail"]
+        assert body["detail"] == "Internal server error"
+
+    @pytest.mark.asyncio
+    async def test_debug_true_includes_detail(self):
+        from fastapi import Request
+
+        from api.core.errors import unhandled_exception_handler
+
+        settings.debug = True
+        scope = {"type": "http", "method": "GET", "path": "/",
+                 "query_string": b"", "headers": []}
+        request = Request(scope)
+        response = await unhandled_exception_handler(
+            request, RuntimeError("sensitive internal detail")
+        )
+
+        import json
+        body = json.loads(response.body)
+        assert "sensitive internal detail" in body["detail"]
+
+    def test_http_exceptions_still_return_their_own_status(self, client):
+        """404/422 etc. must NOT be swallowed by the Exception handler."""
+        client_obj, mock_db = client
+        mock_db.scraping_jobs.find_one = AsyncMock(return_value=None)
+        response = client_obj.get("/api/v1/jobs/nonexistent")
+
+        assert response.status_code == 404

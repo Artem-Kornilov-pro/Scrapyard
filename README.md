@@ -21,6 +21,8 @@ Distributed web scraping platform. Schedule scraping jobs via REST API, execute 
 - ⚡ **Redis caching** — analytics cached for 5min, job lists for 1min
 - 🔐 **API key auth & rate limiting** — optional `X-API-Key` header, Redis-backed per-IP limits
 - 🤖 **Scraping etiquette** — respects `robots.txt`, throttles concurrent requests per domain
+- 📈 **Grafana + Prometheus** — request rate/latency/errors dashboard, Redis metrics, auto-provisioned
+- 🛡️ **Global 500 handler** — all unhandled exceptions logged with tracebacks, safe JSON response to clients
 - 🐳 **Docker** — one-command startup for all services
 
 ---
@@ -78,7 +80,14 @@ cp .env.example .env
 docker-compose up -d
 ```
 
-API available at `http://localhost:8000/docs`
+| Service | URL |
+|---------|-----|
+| API (Swagger UI) | `http://localhost:8000/docs` |
+| Prometheus metrics | `http://localhost:8000/metrics` |
+| Prometheus UI | `http://localhost:9090` |
+| Grafana | `http://localhost:3000` (admin / admin) |
+
+The "Scrapyard Overview" Grafana dashboard is auto-provisioned. It shows request rate by status code, P95 latency, error rate, and Redis stats.
 
 ---
 
