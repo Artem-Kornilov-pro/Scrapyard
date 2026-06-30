@@ -21,7 +21,8 @@ async def get_job_logs(
     assert db.job_logs is not None
 
     cursor = db.job_logs.find(
-        {"job_id": job_id}).sort("timestamp", -1).skip(skip).limit(limit)
+        {"job_id": job_id}, {"_id": 0}
+    ).sort("timestamp", -1).skip(skip).limit(limit)
     return await cursor.to_list(length=limit)
 
 
@@ -38,5 +39,10 @@ async def get_all_logs(
     if status:
         query["status"] = status
 
-    cursor = db.job_logs.find(query).sort("timestamp", -1).skip(skip).limit(limit)
+    cursor = (
+        db.job_logs.find(query, {"_id": 0})
+        .sort("timestamp", -1)
+        .skip(skip)
+        .limit(limit)
+    )
     return await cursor.to_list(length=limit)

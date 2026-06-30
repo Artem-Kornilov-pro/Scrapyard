@@ -92,6 +92,7 @@ API доступно на `http://localhost:8000/docs`
 | `RESPECT_ROBOTS_TXT` | `true` | Воркер проверяет `robots.txt` целевого сайта перед парсингом и пропускает запрещённые URL |
 | `DOMAIN_THROTTLE_SECONDS` | `2.0` | Минимальный интервал между запросами к одному домену, общий для всех воркеров (через Redis-лок) |
 | `SCRAPER_USER_AGENT` | `ScrapyardBot/1.0 (+https://github.com/...)` | User-Agent браузера, также используется для сверки с правилами `robots.txt` |
+| `DRY_RUN_TIMEOUT_SECONDS` | `30` | Сколько API ждёт ответа воркера на `/dry-run`, прежде чем вернуть 504 |
 
 Функции на Redis (кэш, rate limiting, троттлинг доменов) работают в режиме fail-open: если Redis недоступен, API и воркеры продолжают работать без этой защиты, а не падают. `/health` никогда не требует авторизации и не лимитируется — для проверок оркестратором.
 
@@ -114,7 +115,17 @@ PUT    /api/v1/jobs/{id}         # Обновить задачу
 DELETE /api/v1/jobs/{id}         # Удалить задачу
 POST   /api/v1/jobs/{id}/pause   # Приостановить
 POST   /api/v1/jobs/{id}/resume  # Возобновить
+POST   /api/v1/jobs/{id}/run     # Запустить задачу сейчас, минуя расписание
+POST   /api/v1/jobs/dry-run      # Проверить селекторы на реальной странице без сохранения задачи
 GET    /api/v1/jobs/{id}/logs    # Логи задачи
+```
+
+### Результаты
+
+```http
+GET    /api/v1/jobs/{id}/results         # Список результатов (сначала новые)
+GET    /api/v1/jobs/{id}/results/export  # Экспорт items одного запуска в JSON или CSV
+GET    /api/v1/jobs/{id}/results/diff    # Diff двух запусков (по умолчанию — два последних)
 ```
 
 ### Аналитика
@@ -130,7 +141,20 @@ GET    /api/v1/logs                      # Все логи (с фильтрац�
 ### Примеры
 
 ```bash
-# Создать задачу парсинга
+# Проверить селекторы перед сохранением задачи
+curl -X POST http://localhost:8000/api/v1/jobs/dry-run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/products",
+    "selectors": {
+      "items": "div.product-card",
+      "fields": {"title": {"selector": "h3.title", "attr": "text"}}
+    }
+  }'
+
+# Создать задачу парсинга — notify_webhook сработает после 5 подряд
+# неудачных попыток; diff_key используется для сопоставления items
+# между запусками в /diff
 curl -X POST http://localhost:8000/api/v1/jobs \
   -H "Content-Type: application/json" \
   -d '{
@@ -143,8 +167,19 @@ curl -X POST http://localhost:8000/api/v1/jobs \
         "price": {"selector": "span.price", "attr": "text", "transform": "strip_currency"}
       }
     },
-    "schedule": "0 */6 * * *"
+    "schedule": "0 */6 * * *",
+    "diff_key": "title",
+    "notify_webhook": "https://hooks.example.com/scrapyard-alerts"
   }'
+
+# Запустить прямо сейчас, не дожидаясь расписания
+curl -X POST http://localhost:8000/api/v1/jobs/{id}/run
+
+# Посмотреть, что изменилось с последнего запуска
+curl http://localhost:8000/api/v1/jobs/{id}/results/diff
+
+# Экспортировать последний запуск в CSV
+curl http://localhost:8000/api/v1/jobs/{id}/results/export?format=csv
 
 # Получить сводку
 curl http://localhost:8000/api/v1/analytics/overview

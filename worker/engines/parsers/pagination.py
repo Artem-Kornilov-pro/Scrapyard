@@ -133,3 +133,33 @@ async def _handle_scroll_pagination(
     if selectors:
         return await parse_with_selectors(page, selectors)
     return []
+
+
+async def collect_page_items(
+    page: Page,
+    selectors: dict[str, Any],
+    pagination_config: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Parse an already-navigated page, honoring pagination settings.
+
+    Shared by the real scrape task and the dry-run preview so both
+    branch on pagination type the same way.
+    """
+    pagination_config = pagination_config or {}
+    pagination_type = pagination_config.get("type")
+    max_pages = pagination_config.get("max_pages", 1)
+
+    if pagination_type == "scroll":
+        # Scrolling accumulates content into the same page, so the full
+        # result is parsed once after scrolling settles.
+        return await handle_pagination(
+            page, pagination_config, selectors, max_pages
+        )
+    elif pagination_type in ("url", "click"):
+        items = await parse_with_selectors(page, selectors)
+        items += await handle_pagination(
+            page, pagination_config, selectors, max_pages
+        )
+        return items
+
+    return await parse_with_selectors(page, selectors)

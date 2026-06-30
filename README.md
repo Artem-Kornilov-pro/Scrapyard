@@ -93,6 +93,7 @@ These are off by default for a frictionless local setup, but should be configure
 | `RESPECT_ROBOTS_TXT` | `true` | Worker checks the target site's `robots.txt` before scraping and skips disallowed URLs |
 | `DOMAIN_THROTTLE_SECONDS` | `2.0` | Minimum gap between scrape requests to the same domain, enforced across all workers via a Redis lock |
 | `SCRAPER_USER_AGENT` | `ScrapyardBot/1.0 (+https://github.com/...)` | User-Agent sent by the browser and matched against `robots.txt` rules |
+| `DRY_RUN_TIMEOUT_SECONDS` | `30` | How long the API waits for a worker to finish a `/dry-run` before returning 504 |
 
 Redis-backed features (caching, rate limiting, domain throttling) fail open: if Redis is unreachable, the API and workers keep running without that protection rather than going down. `/health` is never authenticated or rate-limited, so orchestrators can always probe it.
 
@@ -115,7 +116,17 @@ PUT    /api/v1/jobs/{id}         # Update job
 DELETE /api/v1/jobs/{id}         # Delete job
 POST   /api/v1/jobs/{id}/pause   # Pause job
 POST   /api/v1/jobs/{id}/resume  # Resume job
+POST   /api/v1/jobs/{id}/run     # Run a job immediately, bypassing its schedule
+POST   /api/v1/jobs/dry-run      # Test selectors against a live page without saving a job
 GET    /api/v1/jobs/{id}/logs    # Get job logs
+```
+
+### Results
+
+```http
+GET    /api/v1/jobs/{id}/results         # List scrape results (most recent first)
+GET    /api/v1/jobs/{id}/results/export  # Export a run's items as JSON or CSV
+GET    /api/v1/jobs/{id}/results/diff    # Diff two runs (defaults to the two most recent)
 ```
 
 ### Analytics
@@ -131,7 +142,19 @@ GET    /api/v1/logs                      # All logs (filterable)
 ### Examples
 
 ```bash
-# Create a scraping job
+# Test selectors before saving a job
+curl -X POST http://localhost:8000/api/v1/jobs/dry-run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/products",
+    "selectors": {
+      "items": "div.product-card",
+      "fields": {"title": {"selector": "h3.title", "attr": "text"}}
+    }
+  }'
+
+# Create a scraping job — notify_webhook fires once the job hits 5
+# consecutive failures; diff_key matches items across runs for /diff
 curl -X POST http://localhost:8000/api/v1/jobs \
   -H "Content-Type: application/json" \
   -d '{
@@ -144,8 +167,19 @@ curl -X POST http://localhost:8000/api/v1/jobs \
         "price": {"selector": "span.price", "attr": "text", "transform": "strip_currency"}
       }
     },
-    "schedule": "0 */6 * * *"
+    "schedule": "0 */6 * * *",
+    "diff_key": "title",
+    "notify_webhook": "https://hooks.example.com/scrapyard-alerts"
   }'
+
+# Run it right now instead of waiting for the schedule
+curl -X POST http://localhost:8000/api/v1/jobs/{id}/run
+
+# See what changed since the last run
+curl http://localhost:8000/api/v1/jobs/{id}/results/diff
+
+# Export the latest run as CSV
+curl http://localhost:8000/api/v1/jobs/{id}/results/export?format=csv
 
 # Get analytics overview
 curl http://localhost:8000/api/v1/analytics/overview

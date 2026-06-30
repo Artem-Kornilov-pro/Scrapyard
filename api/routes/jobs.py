@@ -5,7 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from api.core.cache import jobs_cache
 from api.core.rate_limit import enforce_rate_limit
 from api.core.security import verify_api_key
-from api.models.job import ScrapingJobCreate, ScrapingJobInDB, ScrapingJobUpdate
+from api.models.job import (
+    DryRunRequest,
+    DryRunResult,
+    ScrapingJobCreate,
+    ScrapingJobInDB,
+    ScrapingJobUpdate,
+)
 from api.services.job_service import JobService
 
 router = APIRouter(
@@ -19,6 +25,17 @@ router = APIRouter(
 async def create_job(job_data: ScrapingJobCreate):
     """Create a new scraping job."""
     return await JobService.create_job(job_data)
+
+
+@router.post("/dry-run", response_model=DryRunResult)
+async def dry_run_job(payload: DryRunRequest):
+    """Test selectors against a live page without creating a job."""
+    result = await JobService.dry_run(payload)
+    if result is None:
+        raise HTTPException(
+            status_code=504, detail="Dry run timed out waiting for a worker"
+        )
+    return result
 
 
 @router.get("", response_model=list[ScrapingJobInDB])
@@ -83,3 +100,12 @@ async def resume_job(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
+
+
+@router.post("/{job_id}/run", status_code=202)
+async def run_job_now(job_id: str):
+    """Dispatch a job to the worker immediately, bypassing its schedule."""
+    result = await JobService.run_now(job_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return result

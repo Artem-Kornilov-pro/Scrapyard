@@ -1,9 +1,11 @@
 from datetime import UTC, datetime
-from typing import Optional
+from typing import Any, Optional
 from uuid import uuid4
 
 from croniter import croniter  # type: ignore[import-untyped]
 from pydantic import BaseModel, Field, field_validator
+
+from api.models.validators import validate_selectors_structure, validate_url_format
 
 
 class ScrapingJobBase(BaseModel):
@@ -26,6 +28,18 @@ class ScrapingJobBase(BaseModel):
         },
         description="Scraping settings",
     )
+    notify_webhook: Optional[str] = Field(
+        default=None,
+        description="Webhook URL to POST to when the job hits 5 "
+        "consecutive failures and is marked as 'error'",
+    )
+    diff_key: Optional[str] = Field(
+        default=None,
+        description="Field name used to match items across runs when "
+        "diffing two results (e.g. 'title'). Without it, diffs fall "
+        "back to comparing whole items, so any field change shows up "
+        "as a remove+add instead of a per-field change.",
+    )
 
     @field_validator("schedule")
     @classmethod
@@ -39,21 +53,21 @@ class ScrapingJobBase(BaseModel):
     @classmethod
     def validate_url(cls, v: str) -> str:
         """Validate URL format."""
-        if not v.startswith(("http://", "https://")):
-            raise ValueError("URL must start with http:// or https://")
-        return v
+        return validate_url_format(v)
 
     @field_validator("selectors")
     @classmethod
     def validate_selectors(cls, v: dict) -> dict:
         """Validate selectors structure."""
-        if "items" not in v:
-            raise ValueError("selectors must contain 'items' key")
-        if "fields" not in v:
-            raise ValueError("selectors must contain 'fields' key")
-        if not isinstance(v["fields"], dict) or len(v["fields"]) == 0:
-            raise ValueError("selectors.fields must be a non-empty dict")
-        return v
+        return validate_selectors_structure(v)
+
+    @field_validator("notify_webhook")
+    @classmethod
+    def validate_notify_webhook(cls, v: Optional[str]) -> Optional[str]:
+        """Validate webhook URL format if provided."""
+        if v is None:
+            return v
+        return validate_url_format(v)
 
 
 class ScrapingJobCreate(ScrapingJobBase):
@@ -71,6 +85,8 @@ class ScrapingJobUpdate(BaseModel):
     schedule: Optional[str] = None
     tags: Optional[list[str]] = None
     settings: Optional[dict] = None
+    notify_webhook: Optional[str] = None
+    diff_key: Optional[str] = None
 
     @field_validator("schedule")
     @classmethod
@@ -84,9 +100,17 @@ class ScrapingJobUpdate(BaseModel):
     @classmethod
     def validate_url(cls, v: Optional[str]) -> Optional[str]:
         """Validate URL format if provided."""
-        if v is not None and not v.startswith(("http://", "https://")):
-            raise ValueError("URL must start with http:// or https://")
-        return v
+        if v is None:
+            return v
+        return validate_url_format(v)
+
+    @field_validator("notify_webhook")
+    @classmethod
+    def validate_notify_webhook(cls, v: Optional[str]) -> Optional[str]:
+        """Validate webhook URL format if provided."""
+        if v is None:
+            return v
+        return validate_url_format(v)
 
 
 class ScrapingJobInDB(ScrapingJobBase):
@@ -104,3 +128,33 @@ class ScrapingJobInDB(ScrapingJobBase):
 class ScrapingJobResponse(ScrapingJobInDB):
     """Response model for scraping job API."""
     pass
+
+
+class DryRunRequest(BaseModel):
+    """Request to test selectors against a live page without saving a job."""
+
+    url: str = Field(..., description="Target URL to scrape")
+    selectors: dict = Field(..., description="CSS selectors configuration")
+    settings: dict = Field(
+        default_factory=dict, description="Scraping settings (e.g. pagination)"
+    )
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        return validate_url_format(v)
+
+    @field_validator("selectors")
+    @classmethod
+    def validate_selectors(cls, v: dict) -> dict:
+        return validate_selectors_structure(v)
+
+
+class DryRunResult(BaseModel):
+    """Result of a dry run."""
+
+    success: bool
+    items_count: int = 0
+    items: list[dict[str, Any]] = Field(default_factory=list)
+    truncated: bool = False
+    error: Optional[str] = None

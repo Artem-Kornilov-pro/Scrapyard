@@ -40,14 +40,14 @@ def mock_engine():
         mock_cls.return_value.__aenter__ = AsyncMock(
             return_value=mock_instance
         )
-        mock_cls.return_value.__aexit__ = AsyncMock()
+        mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
         yield mock_cls
 
 
 @pytest.fixture
 def mock_parser():
-    """Mock parse_with_selectors."""
-    with patch("worker.tasks.scraper.parse_with_selectors") as mock:
+    """Mock collect_page_items (parsing + pagination collection)."""
+    with patch("worker.tasks.scraper.collect_page_items") as mock:
         mock.return_value = [
             {"title": "Product 1"},
             {"title": "Product 2"},
@@ -80,6 +80,15 @@ def mock_robots_and_throttle():
         new=AsyncMock(return_value=True),
     ) as mock_slot:
         yield mock_allowed, mock_slot
+
+
+@pytest.fixture(autouse=True)
+def mock_notify():
+    """Default webhook sender to a no-op spy."""
+    with patch(
+        "worker.tasks.scraper.send_webhook_notification", new=AsyncMock()
+    ) as mock:
+        yield mock
 
 
 class TestScrapeJob:
@@ -154,69 +163,63 @@ class TestScrapeJob:
         mock_task.setup.assert_called_once()
 
 
-class TestScrapeJobPagination:
-    """Tests that scrape_job wires pagination into the scraping run."""
+class TestScrapeJobUsesCollectPageItems:
+    """Tests that scrape_job delegates item collection (incl. pagination
+    branching) to collect_page_items and trusts its result, rather than
+    branching on pagination type itself.
+    """
 
     @pytest.mark.asyncio
-    async def test_url_pagination_merges_items_from_all_pages(
-        self, mock_db, mock_engine, mock_parser, mock_task
+    async def test_passes_selectors_and_pagination_config(
+        self, mock_db, mock_engine, mock_task
     ):
-        """First page items plus paginated items end up in the result."""
         job_config = {
             **VALID_JOB_CONFIG,
-            "settings": {
-                "pagination": {"type": "url", "max_pages": 2},
-            },
+            "settings": {"pagination": {"type": "url", "max_pages": 3}},
         }
-
         with patch(
-            "worker.tasks.scraper.handle_pagination",
-            new=AsyncMock(return_value=[{"title": "Product 3"}]),
-        ) as mock_handle_pagination:
+            "worker.tasks.scraper.collect_page_items",
+            new=AsyncMock(
+                return_value=[{"title": "A"}, {"title": "B"}, {"title": "C"}]
+            ),
+        ) as mock_collect:
             result = await _run_scrape(mock_task, job_config)
 
-        mock_handle_pagination.assert_called_once()
+        mock_collect.assert_called_once()
+        call_args = mock_collect.call_args[0]
+        assert call_args[1] == job_config["selectors"]
+        assert call_args[2] == {"type": "url", "max_pages": 3}
         assert result["items_count"] == 3
 
-        call_args = mock_db.scraped_results.insert_one.call_args[0][0]
-        assert call_args["items_count"] == 3
-        assert call_args["metadata"]["pages_processed"] == 2
-
     @pytest.mark.asyncio
-    async def test_scroll_pagination_uses_final_page_state(
-        self, mock_db, mock_engine, mock_parser, mock_task
+    async def test_pages_processed_reflects_max_pages_when_paginated(
+        self, mock_db, mock_engine, mock_task
     ):
-        """Scroll pagination replaces the first-page parse, not adds to it."""
         job_config = {
             **VALID_JOB_CONFIG,
-            "settings": {
-                "pagination": {"type": "scroll", "max_pages": 5},
-            },
+            "settings": {"pagination": {"type": "scroll", "max_pages": 5}},
         }
-
         with patch(
-            "worker.tasks.scraper.handle_pagination",
-            new=AsyncMock(
-                return_value=[{"title": "Product 1"}, {"title": "Product 2"}]
-            ),
-        ) as mock_handle_pagination:
-            result = await _run_scrape(mock_task, job_config)
+            "worker.tasks.scraper.collect_page_items",
+            new=AsyncMock(return_value=[{"title": "A"}]),
+        ):
+            await _run_scrape(mock_task, job_config)
 
-        mock_handle_pagination.assert_called_once()
-        mock_parser.assert_not_called()
-        assert result["items_count"] == 2
+        call_args = mock_db.scraped_results.insert_one.call_args[0][0]
+        assert call_args["metadata"]["pages_processed"] == 5
 
     @pytest.mark.asyncio
-    async def test_no_pagination_type_skips_handle_pagination(
-        self, mock_db, mock_engine, mock_parser, mock_task
+    async def test_no_pagination_settings_defaults_to_empty_config(
+        self, mock_db, mock_engine, mock_task
     ):
-        """Jobs without a pagination type fall back to a single parse."""
         with patch(
-            "worker.tasks.scraper.handle_pagination", new=AsyncMock()
-        ) as mock_handle_pagination:
+            "worker.tasks.scraper.collect_page_items",
+            new=AsyncMock(return_value=[{"title": "A"}, {"title": "B"}]),
+        ) as mock_collect:
             result = await _run_scrape(mock_task, VALID_JOB_CONFIG)
 
-        mock_handle_pagination.assert_not_called()
+        call_args = mock_collect.call_args[0]
+        assert call_args[2] == {}
         assert result["items_count"] == 2
 
 
@@ -309,6 +312,68 @@ class TestDomainThrottling:
         await _run_scrape(mock_task, VALID_JOB_CONFIG)
 
         mock_db.scraping_jobs.update_one.assert_not_called()
+
+
+class TestErrorWebhookNotification:
+    """Tests that a webhook fires when a job crosses into 'error'."""
+
+    @pytest.mark.asyncio
+    async def test_sends_webhook_on_fifth_consecutive_failure(
+        self, mock_db, mock_engine, mock_parser, mock_task, mock_notify
+    ):
+        mock_parser.side_effect = Exception("Parse error")
+        mock_task.retry.side_effect = Exception("Retry")
+        mock_db.scraping_jobs.find_one = AsyncMock(return_value={
+            "job_id": "test-job-123",
+            "name": "Test Job",
+            "url": "https://example.com",
+            "consecutive_failures": 5,
+            "notify_webhook": "https://hooks.example.com/alert",
+        })
+
+        with pytest.raises(Exception):
+            await _run_scrape(mock_task, VALID_JOB_CONFIG)
+
+        mock_notify.assert_called_once()
+        webhook_url, payload = mock_notify.call_args[0]
+        assert webhook_url == "https://hooks.example.com/alert"
+        assert payload["event"] == "job.error"
+        assert payload["job_id"] == "test-job-123"
+        assert payload["consecutive_failures"] == 5
+
+    @pytest.mark.asyncio
+    async def test_no_webhook_configured_does_not_call_notify(
+        self, mock_db, mock_engine, mock_parser, mock_task, mock_notify
+    ):
+        mock_parser.side_effect = Exception("Parse error")
+        mock_task.retry.side_effect = Exception("Retry")
+        mock_db.scraping_jobs.find_one = AsyncMock(return_value={
+            "job_id": "test-job-123",
+            "consecutive_failures": 5,
+            "notify_webhook": None,
+        })
+
+        with pytest.raises(Exception):
+            await _run_scrape(mock_task, VALID_JOB_CONFIG)
+
+        mock_notify.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_below_threshold_does_not_notify(
+        self, mock_db, mock_engine, mock_parser, mock_task, mock_notify
+    ):
+        mock_parser.side_effect = Exception("Parse error")
+        mock_task.retry.side_effect = Exception("Retry")
+        mock_db.scraping_jobs.find_one = AsyncMock(return_value={
+            "job_id": "test-job-123",
+            "consecutive_failures": 2,
+            "notify_webhook": "https://hooks.example.com/alert",
+        })
+
+        with pytest.raises(Exception):
+            await _run_scrape(mock_task, VALID_JOB_CONFIG)
+
+        mock_notify.assert_not_called()
 
 
 class TestScrapeJobBridging:

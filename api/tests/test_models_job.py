@@ -2,6 +2,8 @@ import pytest
 from pydantic import ValidationError
 
 from api.models.job import (
+    DryRunRequest,
+    DryRunResult,
     ScrapingJobCreate,
     ScrapingJobInDB,
     ScrapingJobUpdate,
@@ -167,3 +169,79 @@ class TestScrapingJobInDB:
                 status=status,
             )
             assert job.status == status
+
+
+class TestNotifyWebhookAndDiffKey:
+    """Tests for the optional notify_webhook and diff_key fields."""
+
+    def test_default_to_none(self):
+        job = ScrapingJobCreate(
+            name="Test", url="https://example.com", selectors=VALID_SELECTORS,
+        )
+        assert job.notify_webhook is None
+        assert job.diff_key is None
+
+    def test_valid_webhook_accepted(self):
+        job = ScrapingJobCreate(
+            name="Test",
+            url="https://example.com",
+            selectors=VALID_SELECTORS,
+            notify_webhook="https://hooks.example.com/alert",
+        )
+        assert job.notify_webhook == "https://hooks.example.com/alert"
+
+    def test_invalid_webhook_rejected(self):
+        with pytest.raises(ValidationError) as exc:
+            ScrapingJobCreate(
+                name="Test",
+                url="https://example.com",
+                selectors=VALID_SELECTORS,
+                notify_webhook="not-a-url",
+            )
+        assert "URL must start with http:// or https://" in str(exc.value)
+
+    def test_diff_key_accepted(self):
+        job = ScrapingJobCreate(
+            name="Test",
+            url="https://example.com",
+            selectors=VALID_SELECTORS,
+            diff_key="title",
+        )
+        assert job.diff_key == "title"
+
+    def test_update_allows_clearing_via_partial_update(self):
+        update = ScrapingJobUpdate(notify_webhook="https://hooks.example.com/x")
+        assert update.notify_webhook == "https://hooks.example.com/x"
+        assert update.diff_key is None
+
+    def test_update_invalid_webhook_rejected(self):
+        with pytest.raises(ValidationError):
+            ScrapingJobUpdate(notify_webhook="bad-url")
+
+
+class TestDryRunRequest:
+    """Tests for the DryRunRequest model."""
+
+    def test_valid_request(self):
+        req = DryRunRequest(url="https://example.com", selectors=VALID_SELECTORS)
+        assert req.url == "https://example.com"
+        assert req.settings == {}
+
+    def test_invalid_url_rejected(self):
+        with pytest.raises(ValidationError):
+            DryRunRequest(url="bad-url", selectors=VALID_SELECTORS)
+
+    def test_invalid_selectors_rejected(self):
+        with pytest.raises(ValidationError):
+            DryRunRequest(url="https://example.com", selectors={"items": "div"})
+
+
+class TestDryRunResult:
+    """Tests for the DryRunResult model."""
+
+    def test_defaults(self):
+        result = DryRunResult(success=True)
+        assert result.items_count == 0
+        assert result.items == []
+        assert result.truncated is False
+        assert result.error is None

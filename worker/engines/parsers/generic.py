@@ -40,12 +40,13 @@ async def parse_with_selectors(
             selector = field_config["selector"]
             attr = field_config.get("attr", "text")
 
-            if attr == "text":
-                value = await element.inner_text(selector)
-            elif attr == "class":
-                value = await element.get_attribute(selector, "class")
+            target = await element.query_selector(selector)
+            if target is None:
+                value = None
+            elif attr == "text":
+                value = await target.inner_text()
             else:
-                value = await element.get_attribute(selector, attr)
+                value = await target.get_attribute(attr)
 
             if value is None:
                 value = ""
