@@ -5,6 +5,9 @@
 ### Added (CI)
 - `.github/workflows/docker-e2e.yml` — builds the `docker-compose.yml` images and brings up the full stack (MongoDB, Redis, api, worker, beat), then runs end-to-end smoke tests (`e2e/`) against the live API over HTTP: health check, `/metrics` scrape, and a job create/read/list/delete round trip. Runs on every push/PR to `master` alongside the existing unit test workflow.
 
+### Fixed (CI)
+- `Settings` (`api/core/config.py`) rejected unknown env vars by default; `GRAFANA_PASSWORD` in `.env.example` is only consumed by `docker-compose.yml`'s interpolation, not the app, so `api`/`worker`/`beat` crashed on startup for anyone following the documented `cp .env.example .env && docker-compose up -d` setup. Caught by the new `docker-e2e` workflow.
+
 ### Added (observability + error handling)
 - `GET /metrics` — Prometheus scrape target with request count/latency histogram by route template and status code; implemented as a pure ASGI middleware to avoid interference with exception handling
 - `docker/prometheus.yml` — scrape config for the API and redis-exporter
