@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added (CI)
+- `.github/workflows/docker-e2e.yml` — builds the `docker-compose.yml` images and brings up the full stack (MongoDB, Redis, api, worker, beat), then runs end-to-end smoke tests (`e2e/`) against the live API over HTTP: health check, `/metrics` scrape, and a job create/read/list/delete round trip. Runs on every push/PR to `master` alongside the existing unit test workflow.
+
 ### Added (observability + error handling)
 - `GET /metrics` — Prometheus scrape target with request count/latency histogram by route template and status code; implemented as a pure ASGI middleware to avoid interference with exception handling
 - `docker/prometheus.yml` — scrape config for the API and redis-exporter
