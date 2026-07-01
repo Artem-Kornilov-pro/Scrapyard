@@ -40,7 +40,7 @@ def test_job_crud_round_trip(client):
     payload = {
         "name": "e2e-smoke-job",
         "url": "https://example.com",
-        "selectors": {"title": "h1"},
+        "selectors": {"items": "body", "fields": {"title": "h1"}},
         "tags": ["e2e"],
     }
 
