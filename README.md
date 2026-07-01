@@ -2,6 +2,7 @@
 # 🕸️ Scrapyard — Web Scraper as a Service
 
 [![Tests](https://github.com/Artem-Kornilov-pro/scrapyard/actions/workflows/tests.yml/badge.svg)](https://github.com/Artem-Kornilov-pro/scrapyard/actions/workflows/tests.yml)
+[![Docker Compose E2E](https://github.com/Artem-Kornilov-pro/scrapyard/actions/workflows/docker-e2e.yml/badge.svg)](https://github.com/Artem-Kornilov-pro/scrapyard/actions/workflows/docker-e2e.yml)
 [![Python](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
