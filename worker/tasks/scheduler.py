@@ -4,7 +4,7 @@ from celery import Celery
 from celery.utils.log import get_task_logger
 from croniter import croniter  # type: ignore[import-untyped]
 
-from api.core.database import db
+from api.core.database import db, ensure_connected
 from worker.celery_app import app
 from worker.tasks.scraper import scrape_job
 
@@ -15,7 +15,12 @@ logger = get_task_logger(__name__)
 def sync_scheduled_jobs_task() -> int:
     """Celery Beat task wrapper for sync_scheduled_jobs."""
     import asyncio
-    return asyncio.get_event_loop().run_until_complete(sync_scheduled_jobs(app))
+    return asyncio.get_event_loop().run_until_complete(_run_sync(app))
+
+
+async def _run_sync(celery_app: Celery) -> int:
+    await ensure_connected()
+    return await sync_scheduled_jobs(celery_app)
 
 
 async def sync_scheduled_jobs(celery_app: Celery) -> int:

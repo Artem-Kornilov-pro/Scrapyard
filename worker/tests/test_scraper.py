@@ -390,7 +390,7 @@ class TestScrapeJobBridging:
         self, mock_db, mock_engine, mock_parser
     ):
         with patch(
-            "worker.tasks.scraper.connect_to_mongo", new=AsyncMock()
+            "worker.tasks.scraper.ensure_connected", new=AsyncMock()
         ):
             result = scrape_job(VALID_JOB_CONFIG)
 
