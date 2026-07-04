@@ -87,8 +87,14 @@ docker-compose up -d
 | Prometheus metrics | `http://localhost:8000/metrics` |
 | Prometheus UI | `http://localhost:9090` |
 | Grafana | `http://localhost:3000` (admin / admin) |
+| Alertmanager | `http://localhost:9093` |
+| Jaeger (traces) | `http://localhost:16686` |
 
 The "Scrapyard Overview" Grafana dashboard is auto-provisioned. It shows request rate by status code, P95 latency, error rate, and Redis stats.
+
+Alert rules (`docker/prometheus-alerts.yml`) cover a dead worker, a worker that's up but not draining its queue, a high API error rate, and jobs stuck in `error` status. `docker/alertmanager.yml` ships with a no-op receiver — alerts show up in its UI immediately, add a Slack/webhook receiver there for real notifications.
+
+Tracing (`ENABLE_TRACING=true` by default in `.env.example`) exports spans for the API, Celery tasks, MongoDB, and Redis to the bundled Jaeger — open a trace for a scrape job to see exactly where its time went.
 
 ---
 
