@@ -1,6 +1,6 @@
 from typing import Optional
 
-from playwright.async_api import Browser, Page, async_playwright
+from playwright.async_api import Browser, Page, Playwright, async_playwright
 
 
 class PlaywrightEngine:
@@ -17,6 +17,7 @@ class PlaywrightEngine:
         self.viewport = viewport or {"width": 1920, "height": 1080}
         self.timeout = timeout
         self.user_agent = user_agent
+        self._playwright: Optional[Playwright] = None
         self._browser: Optional[Browser] = None
         self._page: Optional[Page] = None
 
@@ -31,8 +32,8 @@ class PlaywrightEngine:
 
     async def launch(self) -> None:
         """Launch browser instance."""
-        pw = await async_playwright().start()
-        self._browser = await pw.chromium.launch(
+        self._playwright = await async_playwright().start()
+        self._browser = await self._playwright.chromium.launch(
             headless=self.headless,
         )
 
@@ -63,3 +64,6 @@ class PlaywrightEngine:
             await self._browser.close()
             self._browser = None
             self._page = None
+        if self._playwright:
+            await self._playwright.stop()
+            self._playwright = None

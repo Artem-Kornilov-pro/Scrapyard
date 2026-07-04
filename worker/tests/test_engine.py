@@ -94,6 +94,7 @@ class TestPlaywrightEngine:
 
         assert engine._browser is None
         assert engine._page is None
+        assert engine._playwright is None
 
     @pytest.mark.asyncio
     async def test_default_values(self):
