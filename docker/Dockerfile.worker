@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12-slim-bookworm
 
 WORKDIR /app
 
@@ -14,10 +14,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Установка Playwright без системных зависимостей (мы их уже поставили)
-RUN playwright install chromium
-RUN playwright install-deps chromium || true
+# Установка системных зависимостей браузера (нужны права root).
+# Playwright 1.49 не знает Debian trixie (python:3.12-slim с некоторого
+# момента указывает на неё) и падает на несуществующих именах пакетов,
+# поэтому база явно закреплена на bookworm, где install-deps проверенно
+# работает. Без `|| true`, чтобы сборка падала, а не давала воркер с
+# нерабочим браузером.
+RUN playwright install-deps chromium
 
-COPY . .
+RUN useradd --create-home --uid 1000 appuser && chown appuser:appuser /app
+COPY --chown=appuser:appuser . .
+USER appuser
+
+# Браузер ставим уже под непривилегированным пользователем, чтобы
+# кэш попал в его домашний каталог, а не в /root
+RUN playwright install chromium
 
 CMD ["celery", "-A", "worker.celery_app", "worker", "--loglevel=info"]
