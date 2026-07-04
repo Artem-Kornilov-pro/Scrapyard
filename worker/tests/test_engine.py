@@ -9,11 +9,19 @@ from worker.engines.playwright_engine import PlaywrightEngine
 def mock_playwright():
     """Mock Playwright and browser."""
     with patch("worker.engines.playwright_engine.async_playwright") as mock_pw:
-        mock_browser = AsyncMock()
+        mock_response = MagicMock()
+        mock_response.status = 200
+
         mock_page = MagicMock()
-        mock_page.goto = AsyncMock()
-        mock_page.set_default_timeout = MagicMock()
-        mock_browser.new_page = AsyncMock(return_value=mock_page)
+        mock_page.goto = AsyncMock(return_value=mock_response)
+
+        mock_context = MagicMock()
+        mock_context.new_page = AsyncMock(return_value=mock_page)
+        mock_context.set_default_timeout = MagicMock()
+        mock_context.close = AsyncMock()
+
+        mock_browser = AsyncMock()
+        mock_browser.new_context = AsyncMock(return_value=mock_context)
 
         mock_playwright_instance = AsyncMock()
         mock_playwright_instance.chromium.launch = AsyncMock(
@@ -86,6 +94,16 @@ class TestPlaywrightEngine:
         assert page is not None
 
     @pytest.mark.asyncio
+    async def test_navigate_stores_response_status(self, mock_playwright):
+        """Test navigate records the response for status inspection."""
+        engine = PlaywrightEngine()
+        await engine.launch()
+        await engine.navigate("https://example.com")
+
+        assert engine._last_response is not None
+        assert engine._last_response.status == 200
+
+    @pytest.mark.asyncio
     async def test_close(self, mock_playwright):
         """Test closing browser."""
         engine = PlaywrightEngine()
@@ -117,3 +135,48 @@ class TestPlaywrightEngine:
         assert engine.headless is False
         assert engine.viewport == {"width": 800, "height": 600}
         assert engine.timeout == 10000
+
+
+class TestPlaywrightEngineWithSharedBrowser:
+    """Regression: an externally-provided browser (pool mode) must not
+    be closed by the engine, only the per-task context it created.
+    """
+
+    @pytest.mark.asyncio
+    async def test_launch_is_noop_with_external_browser(self):
+        external_browser = AsyncMock()
+        engine = PlaywrightEngine(browser=external_browser)
+
+        await engine.launch()
+
+        assert engine._browser is external_browser
+        assert engine._playwright is None
+
+    @pytest.mark.asyncio
+    async def test_close_does_not_close_external_browser(self):
+        external_browser = AsyncMock()
+        mock_context = AsyncMock()
+        external_browser.new_context = AsyncMock(return_value=mock_context)
+
+        engine = PlaywrightEngine(browser=external_browser)
+        await engine.launch()
+        await engine.new_page()
+        await engine.close()
+
+        mock_context.close.assert_called_once()
+        external_browser.close.assert_not_called()
+        assert engine._browser is external_browser
+
+    @pytest.mark.asyncio
+    async def test_new_page_passes_proxy_to_context(self):
+        external_browser = AsyncMock()
+        mock_context = AsyncMock()
+        external_browser.new_context = AsyncMock(return_value=mock_context)
+        proxy = {"server": "http://proxy.example.com:8080"}
+
+        engine = PlaywrightEngine(browser=external_browser, proxy=proxy)
+        await engine.launch()
+        await engine.new_page()
+
+        external_browser.new_context.assert_called_once()
+        assert external_browser.new_context.call_args.kwargs["proxy"] == proxy

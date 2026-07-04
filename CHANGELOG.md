@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Added (reliability & scale)
+- **Browser pool** — `worker/engines/browser_pool.py` keeps one Chromium instance alive per worker process instead of launching a fresh browser (~1-2s) for every scrape/dry-run. Each task still gets an isolated `BrowserContext` (cookies/cache/storage), only the underlying browser process is shared; a crashed browser is transparently relaunched. Closed cleanly on `worker_process_shutdown`. Verified live: first scrape on a worker process took ~1.6s (cold start), the next three took 0.7-1.0s each, all on the same `ForkPoolWorker`.
+- **Per-domain proxy rotation** — `PROXY_URLS` (comma-separated) configures a pool; `worker/utils/proxy.py` deterministically pins each domain to one proxy (hash-based), so a given site consistently exits through the same IP while load spreads across the pool. Wired into both `PlaywrightEngine` (per-context `proxy`) and the scrape/dry-run tasks.
+- **Per-domain circuit breaker** — `worker/utils/circuit_breaker.py` tracks consecutive 403/429 responses per domain in Redis. After `CIRCUIT_BREAKER_FAILURE_THRESHOLD` (default 3), the domain is put into cooldown for `CIRCUIT_BREAKER_COOLDOWN_SECONDS` (default 300s): further scrape attempts are deferred via `apply_async(countdown=...)` without touching the site at all, instead of retrying immediately. Verified live against a throwaway HTTP server that always returns 403: the 4th run was deferred in 8ms with zero network calls, versus ~0.5s for each of the three blocked attempts that tripped the breaker.
+- `.github/workflows/release.yml` — builds and pushes `api`/`worker`/`beat` images to `ghcr.io` on every `v*` tag.
+
 ## [1.1.0] — 2026-07-04
 
 ### Added (CI)

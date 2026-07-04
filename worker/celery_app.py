@@ -1,4 +1,7 @@
+import asyncio
+
 from celery import Celery
+from celery.signals import worker_process_shutdown
 
 from api.core.config import settings
 
@@ -27,3 +30,13 @@ app.conf.update(
 )
 
 app.autodiscover_tasks(["worker.tasks"])
+
+
+@worker_process_shutdown.connect
+def _close_browser_pool(**kwargs: object) -> None:
+    """Close the pooled Chromium instance when a worker process exits,
+    so it doesn't linger as an orphaned process.
+    """
+    from worker.engines.browser_pool import browser_pool
+
+    asyncio.run(browser_pool.close())
