@@ -8,6 +8,16 @@
 ### Fixed (CI)
 - `Settings` (`api/core/config.py`) rejected unknown env vars by default; `GRAFANA_PASSWORD` in `.env.example` is only consumed by `docker-compose.yml`'s interpolation, not the app, so `api`/`worker`/`beat` crashed on startup for anyone following the documented `cp .env.example .env && docker-compose up -d` setup. Caught by the new `docker-e2e` workflow.
 
+### Fixed (pre-release hardening)
+- **Critical:** the worker's headless Chromium could never actually launch in Docker. `python:3.12-slim` now tracks Debian trixie, which Playwright 1.49 doesn't recognize; `playwright install-deps chromium` failed on unresolvable trixie package names and the failure was silently swallowed by `|| true`, so the image built "successfully" without the shared libraries Chromium needs (libnss3, libatk, etc.). Every real scrape would have failed on browser launch. Fixed by pinning `docker/Dockerfile.{api,worker,beat}` to `python:3.12-slim-bookworm` and removing the `|| true`. Verified by actually launching Chromium and running a live scrape job inside the built container.
+- **Critical:** `worker.tasks.sync_scheduled_jobs` (the Celery Beat task that dispatches due cron jobs every minute) never connected to MongoDB — only `api/main.py`'s FastAPI lifespan and `ScrapingTask.setup()` did. On a real worker, this hit `assert db.scraping_jobs is not None` on every single run, meaning scheduled jobs never actually got dispatched. Missed by the test suite because `worker/tests/test_scheduler.py` mocks `db` directly. Added `api.core.database.ensure_connected()` (idempotent connect-if-needed) and used it in both `scheduler.py` and `scraper.py`, replacing two independent ad-hoc connection trackers that could otherwise leak duplicate `AsyncIOMotorClient`s in the same worker process.
+- `PlaywrightEngine.launch()` started a Playwright driver process via `async_playwright().start()` but never stored or stopped it in `close()` — only the browser was closed. Every scrape and dry-run leaked a driver process. Now stopped alongside the browser.
+- `api/core/security.py` compared the `X-API-Key` header with `!=`, which is vulnerable to a timing attack; switched to `secrets.compare_digest`.
+- `docker/Dockerfile.{api,worker,beat}` ran the app as root. Added a non-root `appuser` in all three.
+- Added `.dockerignore` — the build context previously included `.git`, caches, and test files.
+- `.github/workflows/tests.yml`'s coverage gate was `coverage report --fail-under=75 || echo "..."`, which meant it could never actually fail the build regardless of coverage. Removed the fallback.
+- Removed the obsolete `version:` key from `docker-compose.yml` (silently ignored by Compose v2, just a warning on every command).
+
 ### Added (observability + error handling)
 - `GET /metrics` — Prometheus scrape target with request count/latency histogram by route template and status code; implemented as a pure ASGI middleware to avoid interference with exception handling
 - `docker/prometheus.yml` — scrape config for the API and redis-exporter
