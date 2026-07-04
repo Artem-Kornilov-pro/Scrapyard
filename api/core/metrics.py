@@ -1,9 +1,17 @@
 import time
 
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+from api.core.database import db
 
 REQUEST_COUNT = Counter(
     "http_requests_total",
@@ -15,6 +23,17 @@ REQUEST_LATENCY = Histogram(
     "HTTP request latency in seconds",
     ["method", "path"],
 )
+JOBS_BY_STATUS = Gauge(
+    "scrapyard_jobs_total",
+    "Number of scraping jobs by status",
+    ["status"],
+)
+
+# A job flips to "error" after JobService.run_now's caller
+# (worker.tasks.scrape_job) hits 5 consecutive failures. Any job sitting
+# in this state needs a human to look at it -- see the alert rule
+# ScrapyardJobsInErrorState in docker/prometheus-alerts.yml.
+_JOB_STATUSES = ["active", "paused", "error"]
 
 
 class PrometheusMiddleware:
@@ -58,6 +77,20 @@ class PrometheusMiddleware:
             REQUEST_LATENCY.labels(request.method, path).observe(duration)
 
 
+async def _refresh_job_status_gauges() -> None:
+    """Recompute the per-status job count gauges from MongoDB.
+
+    Cheap: `status` is indexed (see api/core/database.py), and this only
+    runs once per scrape, not per request.
+    """
+    if db.scraping_jobs is None:
+        return
+    for status in _JOB_STATUSES:
+        count = await db.scraping_jobs.count_documents({"status": status})
+        JOBS_BY_STATUS.labels(status).set(count)
+
+
 async def metrics_endpoint() -> Response:
     """Prometheus scrape target."""
+    await _refresh_job_status_gauges()
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)

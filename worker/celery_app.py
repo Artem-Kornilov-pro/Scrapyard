@@ -1,9 +1,11 @@
 import asyncio
 
 from celery import Celery
-from celery.signals import worker_process_shutdown
+from celery.signals import beat_init, worker_process_init, worker_process_shutdown
+from opentelemetry.instrumentation.celery import CeleryInstrumentor
 
 from api.core.config import settings
+from api.core.tracing import setup_tracing
 
 app = Celery(
     "scrapyard",
@@ -21,6 +23,11 @@ app.conf.update(
     task_reject_on_worker_lost=True,
     task_default_retry_delay=60,
     task_max_retries=3,
+    # Task events power celery-exporter's Prometheus metrics (task
+    # counts/latency by name and state, worker up/down) -- see
+    # docker-compose.yml and docker/prometheus-alerts.yml.
+    worker_send_task_events=True,
+    task_send_sent_event=True,
     beat_schedule={
         "sync-scheduled-jobs-every-minute": {
             "task": "worker.tasks.sync_scheduled_jobs",
@@ -30,6 +37,22 @@ app.conf.update(
 )
 
 app.autodiscover_tasks(["worker.tasks"])
+
+
+def _init_tracing(**kwargs: object) -> None:
+    """Set up tracing once this process actually exists.
+
+    Registered against worker_process_init (fired in each forked
+    prefork child) and beat_init (beat never forks) rather than run at
+    import time in the parent -- BatchSpanProcessor's background
+    export thread doesn't survive fork() cleanly.
+    """
+    setup_tracing("scrapyard-worker")
+    CeleryInstrumentor().instrument()
+
+
+worker_process_init.connect(_init_tracing)
+beat_init.connect(_init_tracing)
 
 
 @worker_process_shutdown.connect

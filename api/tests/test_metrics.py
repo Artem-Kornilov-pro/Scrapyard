@@ -61,3 +61,28 @@ class TestMetricsEndpoint:
         # route template should appear, not the raw UUID
         assert "/api/v1/jobs/{job_id}" in body
         assert "some-uuid-123" not in body
+
+
+class TestJobStatusGauges:
+    """Tests for the per-status job count gauges exposed on /metrics."""
+
+    def test_reports_counts_per_status(self, client):
+        with patch("api.core.metrics.db") as mock_db:
+            mock_db.scraping_jobs = MagicMock()
+            mock_db.scraping_jobs.count_documents = AsyncMock(
+                side_effect=[3, 1, 2]
+            )
+            response = client.get("/metrics")
+
+        body = response.text
+        assert 'scrapyard_jobs_total{status="active"} 3.0' in body
+        assert 'scrapyard_jobs_total{status="paused"} 1.0' in body
+        assert 'scrapyard_jobs_total{status="error"} 2.0' in body
+
+    def test_skips_gauge_refresh_when_db_not_connected(self, client):
+        """No crash when /metrics is scraped before Mongo connects."""
+        with patch("api.core.metrics.db") as mock_db:
+            mock_db.scraping_jobs = None
+            response = client.get("/metrics")
+
+        assert response.status_code == 200

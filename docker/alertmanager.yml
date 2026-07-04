@@ -1,0 +1,22 @@
+route:
+  receiver: default
+  group_by: ["alertname"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  # No integration configured out of the box -- alerts are visible in
+  # Alertmanager's UI (http://localhost:9093) and API, but nothing gets
+  # pushed anywhere until a real receiver is added below. Uncomment and
+  # fill in one of these for actual notifications:
+  #
+  # - name: default
+  #   slack_configs:
+  #     - api_url: "https://hooks.slack.com/services/T000/B000/XXXX"
+  #       channel: "#scrapyard-alerts"
+  #
+  # - name: default
+  #   webhook_configs:
+  #     - url: "https://your-webhook-endpoint.example.com/alerts"
+  - name: default

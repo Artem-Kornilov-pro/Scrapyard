@@ -156,6 +156,7 @@ class TestPlaywrightEngineWithSharedBrowser:
     async def test_close_does_not_close_external_browser(self):
         external_browser = AsyncMock()
         mock_context = AsyncMock()
+        mock_context.set_default_timeout = MagicMock()
         external_browser.new_context = AsyncMock(return_value=mock_context)
 
         engine = PlaywrightEngine(browser=external_browser)
@@ -171,6 +172,7 @@ class TestPlaywrightEngineWithSharedBrowser:
     async def test_new_page_passes_proxy_to_context(self):
         external_browser = AsyncMock()
         mock_context = AsyncMock()
+        mock_context.set_default_timeout = MagicMock()
         external_browser.new_context = AsyncMock(return_value=mock_context)
         proxy = {"server": "http://proxy.example.com:8080"}
 
