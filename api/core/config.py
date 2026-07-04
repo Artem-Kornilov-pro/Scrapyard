@@ -43,5 +43,19 @@ class Settings(BaseSettings):
     # giving up and returning 504.
     dry_run_timeout_seconds: int = 30
 
+    # Comma-separated proxy URLs (e.g. "http://user:pass@p1:8080,http://p2:8080").
+    # Empty disables proxying -- scrapes go out directly.
+    proxy_urls: str = ""
+
+    # Consecutive 403/429 responses from a domain before the circuit
+    # breaker opens and defers scrapes to that domain for a cooldown period.
+    circuit_breaker_failure_threshold: int = 3
+    circuit_breaker_cooldown_seconds: int = 300
+
+    @property
+    def proxy_list(self) -> list[str]:
+        """Parsed, whitespace-trimmed list of configured proxy URLs."""
+        return [p.strip() for p in self.proxy_urls.split(",") if p.strip()]
+
 
 settings = Settings()

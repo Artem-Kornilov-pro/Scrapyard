@@ -33,6 +33,20 @@ def mock_collect():
         yield mock
 
 
+@pytest.fixture(autouse=True)
+def mock_pool_and_proxy():
+    """Default every test to "no proxy, pooled browser" instead of
+    actually starting a Playwright driver process.
+    """
+    with patch(
+        "worker.tasks.dry_run.browser_pool.get_browser",
+        new=AsyncMock(return_value=MagicMock()),
+    ), patch(
+        "worker.tasks.dry_run.get_proxy_for_domain", return_value=None
+    ) as mock_proxy:
+        yield mock_proxy
+
+
 class TestRunDryRun:
     """Tests for the dry-run preview logic."""
 

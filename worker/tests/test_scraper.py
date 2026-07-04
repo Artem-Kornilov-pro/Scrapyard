@@ -34,8 +34,12 @@ def mock_db():
 def mock_engine():
     """Mock PlaywrightEngine."""
     with patch("worker.tasks.scraper.PlaywrightEngine") as mock_cls:
+        mock_response = MagicMock()
+        mock_response.status = 200
+
         mock_instance = MagicMock()
         mock_instance._page = MagicMock()
+        mock_instance._last_response = mock_response
         mock_instance.navigate = AsyncMock()
         mock_cls.return_value.__aenter__ = AsyncMock(
             return_value=mock_instance
@@ -89,6 +93,27 @@ def mock_notify():
         "worker.tasks.scraper.send_webhook_notification", new=AsyncMock()
     ) as mock:
         yield mock
+
+
+@pytest.fixture(autouse=True)
+def mock_pool_and_circuit_breaker():
+    """Default every test to "no proxy, circuit closed, pooled browser".
+
+    Individual tests override `is_open` to exercise the deferred path.
+    """
+    with patch(
+        "worker.tasks.scraper.browser_pool.get_browser",
+        new=AsyncMock(return_value=MagicMock()),
+    ), patch(
+        "worker.tasks.scraper.get_proxy_for_domain", return_value=None
+    ), patch(
+        "worker.tasks.scraper.is_open", new=AsyncMock(return_value=False)
+    ) as mock_is_open, patch(
+        "worker.tasks.scraper.record_blocked", new=AsyncMock()
+    ) as mock_record_blocked, patch(
+        "worker.tasks.scraper.record_success", new=AsyncMock()
+    ) as mock_record_success:
+        yield mock_is_open, mock_record_blocked, mock_record_success
 
 
 class TestScrapeJob:
@@ -312,6 +337,70 @@ class TestDomainThrottling:
         await _run_scrape(mock_task, VALID_JOB_CONFIG)
 
         mock_db.scraping_jobs.update_one.assert_not_called()
+
+
+class TestCircuitBreaker:
+    """Tests that an open circuit defers scrapes instead of hitting the
+    domain, and that blocked (403/429) responses trip the breaker.
+    """
+
+    @pytest.mark.asyncio
+    async def test_open_circuit_defers_instead_of_scraping(
+        self, mock_db, mock_engine, mock_parser, mock_task,
+        mock_pool_and_circuit_breaker,
+    ):
+        mock_is_open, _, _ = mock_pool_and_circuit_breaker
+        mock_is_open.return_value = True
+
+        result = await _run_scrape(mock_task, VALID_JOB_CONFIG)
+
+        assert result["items_count"] == 0
+        assert result["deferred"] == "circuit_open"
+        mock_engine.assert_not_called()
+        mock_db.scraped_results.insert_one.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_open_circuit_requeues_with_cooldown(
+        self, mock_db, mock_engine, mock_parser, mock_task,
+        mock_pool_and_circuit_breaker,
+    ):
+        mock_is_open, _, _ = mock_pool_and_circuit_breaker
+        mock_is_open.return_value = True
+
+        await _run_scrape(mock_task, VALID_JOB_CONFIG)
+
+        mock_task.apply_async.assert_called_once()
+        _, kwargs = mock_task.apply_async.call_args
+        assert kwargs["args"] == [VALID_JOB_CONFIG]
+        assert "countdown" in kwargs
+
+    @pytest.mark.asyncio
+    async def test_blocked_response_skips_and_records_failure(
+        self, mock_db, mock_engine, mock_parser, mock_task,
+        mock_pool_and_circuit_breaker,
+    ):
+        _, mock_record_blocked, mock_record_success = mock_pool_and_circuit_breaker
+        mock_engine.return_value.__aenter__.return_value._last_response.status = 403
+
+        result = await _run_scrape(mock_task, VALID_JOB_CONFIG)
+
+        assert result["items_count"] == 0
+        assert result["skipped"] == "http_403"
+        mock_record_blocked.assert_called_once_with("example.com")
+        mock_record_success.assert_not_called()
+        mock_db.scraped_results.insert_one.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_successful_response_records_success(
+        self, mock_db, mock_engine, mock_parser, mock_task,
+        mock_pool_and_circuit_breaker,
+    ):
+        _, mock_record_blocked, mock_record_success = mock_pool_and_circuit_breaker
+
+        await _run_scrape(mock_task, VALID_JOB_CONFIG)
+
+        mock_record_success.assert_called_once_with("example.com")
+        mock_record_blocked.assert_not_called()
 
 
 class TestErrorWebhookNotification:

@@ -10,9 +10,12 @@ from api.core.cache import domain_throttle_cache
 from api.core.config import settings
 from api.core.database import db, ensure_connected
 from worker.celery_app import app
+from worker.engines.browser_pool import browser_pool
 from worker.engines.parsers.pagination import collect_page_items
 from worker.engines.playwright_engine import PlaywrightEngine
+from worker.utils.circuit_breaker import is_open, record_blocked, record_success
 from worker.utils.notify import send_webhook_notification
+from worker.utils.proxy import get_proxy_for_domain
 from worker.utils.robots import is_allowed
 from worker.utils.throttle import acquire_domain_slot, extract_domain
 
@@ -73,6 +76,24 @@ async def _run_scrape(
         return {"run_id": run_id, "items_count": 0, "skipped": "robots_txt"}
 
     domain = extract_domain(url)
+
+    if await is_open(domain):
+        logger.info(
+            "Job %s deferred: domain %s circuit breaker is open "
+            "(repeated 403/429 responses)",
+            job_id,
+            domain,
+        )
+        self.apply_async(
+            args=[job_config],
+            countdown=settings.circuit_breaker_cooldown_seconds,
+        )
+        return {
+            "run_id": run_id,
+            "items_count": 0,
+            "deferred": "circuit_open",
+        }
+
     if not await acquire_domain_slot(domain):
         logger.info(
             "Job %s deferred: domain %s is within its throttle window",
@@ -104,10 +125,36 @@ async def _run_scrape(
     max_pages = pagination_config.get("max_pages", 1)
 
     try:
+        browser = await browser_pool.get_browser()
+        proxy = get_proxy_for_domain(domain)
         async with PlaywrightEngine(
-            headless=True, user_agent=settings.scraper_user_agent
+            headless=True,
+            user_agent=settings.scraper_user_agent,
+            browser=browser,
+            proxy=proxy,
         ) as engine:
             await engine.navigate(job_config["url"])
+
+            status = engine._last_response.status if engine._last_response else 200
+            if status in (403, 429):
+                await record_blocked(domain)
+                logger.warning(
+                    "Job %s blocked by %s: HTTP %d", job_id, domain, status
+                )
+                await db.job_logs.insert_one({
+                    "job_id": job_id,
+                    "run_id": run_id,
+                    "status": "skipped",
+                    "timestamp": datetime.now(UTC),
+                    "reason": f"http_{status}",
+                })
+                return {
+                    "run_id": run_id,
+                    "items_count": 0,
+                    "skipped": f"http_{status}",
+                }
+
+            await record_success(domain)
             items = await collect_page_items(
                 engine._page, selectors, pagination_config
             )

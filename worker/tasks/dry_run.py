@@ -5,8 +5,11 @@ from celery.utils.log import get_task_logger
 
 from api.core.config import settings
 from worker.celery_app import app
+from worker.engines.browser_pool import browser_pool
 from worker.engines.parsers.pagination import collect_page_items
 from worker.engines.playwright_engine import PlaywrightEngine
+from worker.utils.proxy import get_proxy_for_domain
+from worker.utils.throttle import extract_domain
 
 logger = get_task_logger(__name__)
 
@@ -27,8 +30,13 @@ async def _run_dry_run(payload: dict[str, Any]) -> dict[str, Any]:
     pagination_config = (payload.get("settings") or {}).get("pagination") or {}
 
     try:
+        browser = await browser_pool.get_browser()
+        proxy = get_proxy_for_domain(extract_domain(url))
         async with PlaywrightEngine(
-            headless=True, user_agent=settings.scraper_user_agent
+            headless=True,
+            user_agent=settings.scraper_user_agent,
+            browser=browser,
+            proxy=proxy,
         ) as engine:
             await engine.navigate(url)
             items = await collect_page_items(
