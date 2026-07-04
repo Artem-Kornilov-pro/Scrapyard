@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.2.0] — 2026-07-04
 
 ### Added (reliability & scale)
 - **Browser pool** — `worker/engines/browser_pool.py` keeps one Chromium instance alive per worker process instead of launching a fresh browser (~1-2s) for every scrape/dry-run. Each task still gets an isolated `BrowserContext` (cookies/cache/storage), only the underlying browser process is shared; a crashed browser is transparently relaunched. Closed cleanly on `worker_process_shutdown`. Verified live: first scrape on a worker process took ~1.6s (cold start), the next three took 0.7-1.0s each, all on the same `ForkPoolWorker`.

@@ -21,7 +21,10 @@
 - ⚡ **Кэширование Redis** — аналитика кэшируется на 5 мин, списки задач на 1 мин
 - 🔐 **API-ключи и rate limiting** — опциональный заголовок `X-API-Key`, лимиты на Redis по IP
 - 🤖 **Этика парсинга** — учитывает `robots.txt`, троттлинг запросов по домену
-- 📈 **Grafana + Prometheus** — дашборд с метриками запросов/латентности/ошибок и Redis, auto-provisioned
+- 🌍 **Ротация прокси и circuit breaker** — прокси закреплён за доменом, повторные 403/429 отправляют домен в cooldown вместо долбёжки
+- 🏊 **Пул браузеров** — один Chromium на процесс воркера вместо запуска на каждую задачу
+- 📈 **Grafana + Prometheus + Alertmanager** — дашборд метрик запросов/латентности/ошибок, метрики Redis/Celery, алерты на упавший воркер/высокий error rate/застрявшие задачи
+- 🔭 **Распределённый трейсинг** — спаны OpenTelemetry по API, задачам Celery, MongoDB и Redis, видны во встроенном Jaeger
 - 🛡️ **Глобальный обработчик 500** — все непойманные исключения логируются с трейсбеком, клиент получает безопасный JSON
 - 🐳 **Docker** — запуск всех сервисов одной командой
 
@@ -214,11 +217,13 @@ scrapyard/
 │   ├── services/           # Бизнес-логика
 │   └── tests/              # Тесты API
 ├── worker/                 # Celery воркер
-│   ├── engines/            # Playwright движок, парсеры
-│   ├── tasks/              # Celery задачи (парсер, планировщик)
+│   ├── engines/            # Playwright движок, пул браузеров, парсеры
+│   ├── tasks/              # Celery задачи (парсер, dry-run, планировщик)
+│   ├── utils/              # robots.txt, троттлинг, прокси, circuit breaker
 │   └── tests/              # Тесты воркера
+├── e2e/                    # Smoke-тесты против живого docker-compose стека
 ├── scripts/                # Скрипт нагрузочного тестирования
-├── docker/                 # Dockerfile'ы
+├── docker/                 # Dockerfile'ы + конфиги Prometheus/Alertmanager/Grafana
 ├── .github/workflows/      # CI/CD
 ├── docker-compose.yml
 ├── requirements.txt
