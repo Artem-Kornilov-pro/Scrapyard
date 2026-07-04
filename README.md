@@ -22,7 +22,10 @@ Distributed web scraping platform. Schedule scraping jobs via REST API, execute 
 - ⚡ **Redis caching** — analytics cached for 5min, job lists for 1min
 - 🔐 **API key auth & rate limiting** — optional `X-API-Key` header, Redis-backed per-IP limits
 - 🤖 **Scraping etiquette** — respects `robots.txt`, throttles concurrent requests per domain
-- 📈 **Grafana + Prometheus** — request rate/latency/errors dashboard, Redis metrics, auto-provisioned
+- 🌍 **Proxy rotation & circuit breaker** — per-domain proxy pinning, and repeated 403/429s put a domain into cooldown instead of hammering it
+- 🏊 **Browser pooling** — one Chromium instance shared per worker process instead of a fresh launch per scrape
+- 📈 **Grafana + Prometheus + Alertmanager** — request rate/latency/errors dashboard, Redis/Celery metrics, alert rules for a dead worker/high error rate/stuck jobs
+- 🔭 **Distributed tracing** — OpenTelemetry spans across the API, Celery tasks, MongoDB, and Redis, viewable in the bundled Jaeger
 - 🛡️ **Global 500 handler** — all unhandled exceptions logged with tracebacks, safe JSON response to clients
 - 🐳 **Docker** — one-command startup for all services
 
@@ -214,11 +217,13 @@ scrapyard/
 │   ├── services/           # Business logic
 │   └── tests/              # API tests
 ├── worker/                 # Celery worker
-│   ├── engines/            # Playwright engine, parsers
-│   ├── tasks/              # Celery tasks (scraper, scheduler)
+│   ├── engines/            # Playwright engine, browser pool, parsers
+│   ├── tasks/              # Celery tasks (scraper, dry-run, scheduler)
+│   ├── utils/              # Robots.txt, throttling, proxy, circuit breaker
 │   └── tests/              # Worker tests
+├── e2e/                    # Smoke tests against a live docker-compose stack
 ├── scripts/                # Benchmark script
-├── docker/                 # Dockerfiles
+├── docker/                 # Dockerfiles + Prometheus/Alertmanager/Grafana config
 ├── .github/workflows/      # CI/CD
 ├── docker-compose.yml
 ├── requirements.txt
