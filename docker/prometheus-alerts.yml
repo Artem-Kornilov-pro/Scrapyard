@@ -1,0 +1,52 @@
+groups:
+  - name: scrapyard
+    rules:
+      - alert: ScrapyardWorkerDown
+        expr: sum(celery_worker_up) == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No Celery worker is sending heartbeats"
+          description: >-
+            celery_worker_up has been 0 for 2 minutes -- no worker
+            process is alive to run scrape jobs.
+
+      - alert: ScrapyardNoTasksProcessedRecently
+        expr: sum(rate(celery_task_succeeded_total[5m])) == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No Celery tasks have succeeded in 5 minutes"
+          description: >-
+            sync_scheduled_jobs runs every minute; zero successes over
+            5 minutes means a worker is up but not actually draining
+            its queue (broker issue, deadlock, crash loop).
+
+      - alert: ScrapyardHighApiErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total[5m]))
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API 5xx error rate above 5%"
+          description: >-
+            More than 5% of API requests have failed with a 5xx
+            status over the last 5 minutes.
+
+      - alert: ScrapyardJobsInErrorState
+        expr: scrapyard_jobs_total{status="error"} > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value }} job(s) stuck in error status"
+          description: >-
+            One or more jobs have hit 5 consecutive scrape failures
+            and were auto-paused into 'error' status. Check
+            GET /api/v1/jobs?status=error for details.

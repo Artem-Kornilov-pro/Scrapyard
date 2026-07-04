@@ -52,6 +52,13 @@ class Settings(BaseSettings):
     circuit_breaker_failure_threshold: int = 3
     circuit_breaker_cooldown_seconds: int = 300
 
+    # OpenTelemetry tracing across api -> Celery -> MongoDB/Redis. Off by
+    # default (e.g. for bare `uvicorn api.main:app` or tests, where
+    # there's no collector to send spans to); docker-compose enables it
+    # via .env.example since Jaeger is bundled there.
+    enable_tracing: bool = False
+    otel_exporter_otlp_endpoint: str = "http://jaeger:4317"
+
     @property
     def proxy_list(self) -> list[str]:
         """Parsed, whitespace-trimmed list of configured proxy URLs."""

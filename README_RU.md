@@ -86,8 +86,14 @@ docker-compose up -d
 | Prometheus-метрики | `http://localhost:8000/metrics` |
 | Prometheus UI | `http://localhost:9090` |
 | Grafana | `http://localhost:3000` (admin / admin) |
+| Alertmanager | `http://localhost:9093` |
+| Jaeger (трейсы) | `http://localhost:16686` |
 
 Дашборд "Scrapyard Overview" подхватывается автоматически через provisioning. Показывает частоту запросов по статусам, P95-латентность, частоту ошибок и метрики Redis.
+
+Правила алертов (`docker/prometheus-alerts.yml`) покрывают упавший воркер, воркер, который жив, но не разбирает очередь, высокий error rate API и задачи, застрявшие в статусе `error`. `docker/alertmanager.yml` по умолчанию содержит пустой (no-op) receiver — алерты сразу видны в его UI, для реальных уведомлений добавьте туда Slack/webhook.
+
+Трейсинг (`ENABLE_TRACING=true` по умолчанию в `.env.example`) экспортирует спаны API, задач Celery, MongoDB и Redis в встроенный Jaeger — открыв трейс конкретного scrape-запуска, видно, на что ушло время.
 
 ---
 

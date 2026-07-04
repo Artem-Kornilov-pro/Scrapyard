@@ -81,17 +81,49 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  celery-exporter:
+    image: danihodovic/celery-exporter@sha256:7e4622746e7d07eca0040a476ba4d904383f70ef7f90ef2db68a49bdf4c1b203
+    container_name: scrapyard-celery-exporter
+    command: ["--broker-url=${REDIS_URL:-redis://redis:6379/0}"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.65.0
+    container_name: scrapyard-jaeger
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686" # UI
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.0
+    container_name: scrapyard-alertmanager
+    volumes:
+      - ./docker/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "9093:9093"
+    restart: unless-stopped
+
   prometheus:
     image: prom/prometheus:v3.1.0
     container_name: scrapyard-prometheus
     volumes:
       - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus-alerts.yml:/etc/prometheus/prometheus-alerts.yml:ro
       - prometheus_data:/prometheus
     ports:
       - "9090:9090"
     depends_on:
       - api
       - redis-exporter
+      - celery-exporter
+      - alertmanager
     restart: unless-stopped
 
   grafana:

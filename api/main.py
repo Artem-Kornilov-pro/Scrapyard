@@ -1,12 +1,16 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from api.core.cache import analytics_cache, jobs_cache, rate_limit_cache
 from api.core.database import close_mongo_connection, connect_to_mongo
 from api.core.errors import unhandled_exception_handler
 from api.core.metrics import PrometheusMiddleware, metrics_endpoint
+from api.core.tracing import setup_tracing
 from api.routes import analytics, jobs, logs, results
+
+setup_tracing("scrapyard-api")
 
 
 @asynccontextmanager
@@ -32,6 +36,7 @@ app = FastAPI(
 
 app.add_exception_handler(Exception, unhandled_exception_handler)
 app.add_middleware(PrometheusMiddleware)
+FastAPIInstrumentor.instrument_app(app)
 
 # Routes
 app.include_router(jobs.router)
