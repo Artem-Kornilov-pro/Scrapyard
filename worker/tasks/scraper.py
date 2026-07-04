@@ -8,7 +8,7 @@ from celery.utils.log import get_task_logger
 
 from api.core.cache import domain_throttle_cache
 from api.core.config import settings
-from api.core.database import connect_to_mongo, db
+from api.core.database import db, ensure_connected
 from worker.celery_app import app
 from worker.engines.parsers.pagination import collect_page_items
 from worker.engines.playwright_engine import PlaywrightEngine
@@ -27,7 +27,7 @@ class ScrapingTask(Task):
     async def setup(self) -> None:
         """Ensure MongoDB and Redis connections on worker start."""
         if not self._db_connected:
-            await connect_to_mongo()
+            await ensure_connected()
             await domain_throttle_cache.connect()
             self._db_connected = True
 

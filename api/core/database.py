@@ -71,6 +71,17 @@ async def connect_to_mongo():
     )
 
 
+async def ensure_connected():
+    """Connect to MongoDB if not already connected.
+
+    Idempotent, so it's safe to call at the top of any Celery task that
+    touches the database without knowing whether another task already
+    connected in this worker process.
+    """
+    if db.client is None:
+        await connect_to_mongo()
+
+
 async def close_mongo_connection():
     """Close MongoDB connection."""
     if db.client:
