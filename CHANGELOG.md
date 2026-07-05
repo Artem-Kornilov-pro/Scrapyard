@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed (Grafana)
+- The provisioned Prometheus datasource had no explicit `uid`, so a failed re-provisioning attempt left a second, broken datasource (empty URL) behind instead of updating the original in place. Pinned `uid: prometheus` and switched the dashboard's panel-level datasource references to the explicit `{type, uid}` form so restarts are idempotent.
+- The "Scrapyard Overview" dashboard never visualized the Celery/job-status metrics added by the alerting work — `celery_worker_up`, `celery_task_succeeded_total`/`failed_total`, and `scrapyard_jobs_total` were collected by Prometheus but shown nowhere. Added Celery Task Throughput, Celery Worker Status, Active Jobs, and Jobs by Status panels.
+
 ## [1.3.0] — 2026-07-05
 
 ### Added (web dashboard)
