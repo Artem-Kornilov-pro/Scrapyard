@@ -13,6 +13,7 @@
 
 ## 🎯 Возможности
 
+- 🖥️ **Веб-дашборд** — React SPA для управления задачами, живого теста селекторов, просмотра результатов/диффов/логов и аналитики без curl
 - 📅 **Задачи по расписанию** — cron-выражения для периодического сбора данных
 - 🧩 **Универсальный парсер** — задавай CSS-селекторы через API, без написания кода
 - 🌐 **Playwright** — поддержка JavaScript-сайтов и SPA
@@ -85,6 +86,7 @@ docker-compose up -d
 
 | Сервис | URL |
 |--------|-----|
+| Веб-дашборд | `http://localhost:5173` |
 | API (Swagger UI) | `http://localhost:8000/docs` |
 | Prometheus-метрики | `http://localhost:8000/metrics` |
 | Prometheus UI | `http://localhost:9090` |
@@ -97,6 +99,16 @@ docker-compose up -d
 Правила алертов (`docker/prometheus-alerts.yml`) покрывают упавший воркер, воркер, который жив, но не разбирает очередь, высокий error rate API и задачи, застрявшие в статусе `error`. `docker/alertmanager.yml` по умолчанию содержит пустой (no-op) receiver — алерты сразу видны в его UI, для реальных уведомлений добавьте туда Slack/webhook.
 
 Трейсинг (`ENABLE_TRACING=true` по умолчанию в `.env.example`) экспортирует спаны API, задач Celery, MongoDB и Redis в встроенный Jaeger — открыв трейс конкретного scrape-запуска, видно, на что ушло время.
+
+### Разработка фронтенда
+
+Для hot-reload при работе над `web/` запустите его вне Docker против API из docker-compose:
+
+```bash
+cd web
+npm install
+npm run dev   # http://localhost:5173, проксирует /api на localhost:8000
+```
 
 ---
 
@@ -221,6 +233,12 @@ scrapyard/
 │   ├── tasks/              # Celery задачи (парсер, dry-run, планировщик)
 │   ├── utils/              # robots.txt, троттлинг, прокси, circuit breaker
 │   └── tests/              # Тесты воркера
+├── web/                    # Дашборд на React + TypeScript (Vite)
+│   └── src/
+│       ├── api/            # Типизированный API-клиент
+│       ├── components/     # Переиспользуемые UI-компоненты
+│       ├── hooks/          # React Query хуки
+│       └── pages/          # Список задач, детали, форма, аналитика
 ├── e2e/                    # Smoke-тесты против живого docker-compose стека
 ├── scripts/                # Скрипт нагрузочного тестирования
 ├── docker/                 # Dockerfile'ы + конфиги Prometheus/Alertmanager/Grafana

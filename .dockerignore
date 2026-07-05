@@ -18,6 +18,8 @@ coverage.xml
 e2e
 api/tests
 worker/tests
+web/node_modules
+web/dist
 README.md
 README_RU.md
 CHANGELOG.md

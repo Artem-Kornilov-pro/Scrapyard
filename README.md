@@ -14,6 +14,7 @@ Distributed web scraping platform. Schedule scraping jobs via REST API, execute 
 
 ## 🎯 Features
 
+- 🖥️ **Web dashboard** — a React SPA to manage jobs, test selectors live, inspect results/diffs/logs, and browse analytics, no curl required
 - 📅 **Scheduled jobs** — cron expressions for periodic data collection
 - 🧩 **Generic parser** — define CSS selectors via API, no code needed
 - 🌐 **Playwright** — full JavaScript/SPA support
@@ -86,6 +87,7 @@ docker-compose up -d
 
 | Service | URL |
 |---------|-----|
+| Web dashboard | `http://localhost:5173` |
 | API (Swagger UI) | `http://localhost:8000/docs` |
 | Prometheus metrics | `http://localhost:8000/metrics` |
 | Prometheus UI | `http://localhost:9090` |
@@ -98,6 +100,16 @@ The "Scrapyard Overview" Grafana dashboard is auto-provisioned. It shows request
 Alert rules (`docker/prometheus-alerts.yml`) cover a dead worker, a worker that's up but not draining its queue, a high API error rate, and jobs stuck in `error` status. `docker/alertmanager.yml` ships with a no-op receiver — alerts show up in its UI immediately, add a Slack/webhook receiver there for real notifications.
 
 Tracing (`ENABLE_TRACING=true` by default in `.env.example`) exports spans for the API, Celery tasks, MongoDB, and Redis to the bundled Jaeger — open a trace for a scrape job to see exactly where its time went.
+
+### Frontend development
+
+For hot-reload while working on `web/`, run it outside Docker against a docker-compose API:
+
+```bash
+cd web
+npm install
+npm run dev   # http://localhost:5173, proxies /api to localhost:8000
+```
 
 ---
 
@@ -221,6 +233,12 @@ scrapyard/
 │   ├── tasks/              # Celery tasks (scraper, dry-run, scheduler)
 │   ├── utils/              # Robots.txt, throttling, proxy, circuit breaker
 │   └── tests/              # Worker tests
+├── web/                    # React + TypeScript dashboard (Vite)
+│   └── src/
+│       ├── api/            # Typed API client
+│       ├── components/     # Shared UI
+│       ├── hooks/          # React Query hooks
+│       └── pages/          # Jobs, job detail, new/edit job, analytics
 ├── e2e/                    # Smoke tests against a live docker-compose stack
 ├── scripts/                # Benchmark script
 ├── docker/                 # Dockerfiles + Prometheus/Alertmanager/Grafana config

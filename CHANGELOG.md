@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Added (web dashboard)
+- `web/` — a React + TypeScript + Vite dashboard: job list with status filters and inline actions (run/pause/resume/delete), a job creation form with a visual selector/field builder and a live "Test selectors" dry-run preview, a job detail page (results, logs, diff between runs, JSON/CSV export), and an analytics page (job-status counts, success rate, slowest jobs chart). Client-side routing with animated page transitions (React Router + Framer Motion), light/dark theme, and an optional locally-stored API key sent as `X-API-Key`.
+- `docker/Dockerfile.web` — multi-stage build (Node build → static files served by `nginx-unprivileged`, non-root like the other images) — new `web` service in `docker-compose.yml`/`docker-compose.prod.yml`. `docker/nginx.web.conf` reverse-proxies `/api/*` to the `api` service so the SPA only ever calls same-origin relative URLs — no CORS configuration needed on the API, in dev (Vite's proxy) or prod (nginx) alike.
+
+### Fixed
+- `GET /api/v1/jobs` returned a 500 on a warm cache hit. The route cached raw `ScrapingJobInDB` instances; `RedisCache.set()` falls back to `str(obj)` for anything `json.dumps` can't natively serialize, so the cached value became a list of Pydantic repr strings, and FastAPI's response validation rejected it on the next read within the 60s TTL. Found while building the dashboard's job list against a live stack — every second load of the page failed. Fixed by caching `jsonable_encoder(result)` instead.
+
 ## [1.2.0] — 2026-07-04
 
 ### Added (reliability & scale)

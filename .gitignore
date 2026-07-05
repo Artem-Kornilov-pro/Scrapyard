@@ -37,6 +37,11 @@ Thumbs.db
 # Docker
 .docker/
 
+# Node (web/)
+node_modules/
+*.local
+*.tsbuildinfo
+
 # Coverage
 htmlcov/
 .coverage
