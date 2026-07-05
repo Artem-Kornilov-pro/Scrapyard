@@ -1,6 +1,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
 
 from api.core.cache import jobs_cache
 from api.core.rate_limit import enforce_rate_limit
@@ -54,7 +55,12 @@ async def list_jobs(
     result = await JobService.list_jobs(
         status=status, tags=tags, skip=skip, limit=limit
     )
-    await jobs_cache.set(cache_key, result)
+    # Cache JSON-safe dicts, not the ScrapingJobInDB instances themselves --
+    # RedisCache.set() falls back to `str(obj)` for anything it can't
+    # natively serialize, which for a Pydantic model is its repr. A cache
+    # hit would then return a list of repr strings instead of job data,
+    # and FastAPI's response validation would reject it with a 500.
+    await jobs_cache.set(cache_key, jsonable_encoder(result))
     return result
 
 

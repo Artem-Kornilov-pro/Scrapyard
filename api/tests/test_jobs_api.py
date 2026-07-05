@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from api.core.cache import RedisCache
 from api.models.job import ScrapingJobInDB
 
 VALID_SELECTORS = {
@@ -20,6 +21,35 @@ def _make_mock_cursor(return_value):
     mock_cursor.limit = MagicMock(return_value=mock_cursor)
     mock_cursor.to_list = AsyncMock(return_value=return_value)
     return mock_cursor
+
+
+class _FakeRedis:
+    """Minimal in-memory stand-in for the subset of redis.asyncio used by
+    RedisCache.get/set -- enough to exercise a real json.dumps/loads
+    round trip, which a fully-mocked jobs_cache would skip entirely.
+    """
+
+    def __init__(self) -> None:
+        self.store: dict[str, str] = {}
+
+    async def get(self, key: str) -> str | None:
+        return self.store.get(key)
+
+    async def setex(self, key: str, ttl: int, value: str) -> None:
+        self.store[key] = value
+
+
+@pytest.fixture
+def real_jobs_cache():
+    """A RedisCache backed by _FakeRedis instead of the mocked-out one
+    the `client` fixture otherwise leaves as a permanent no-op (see
+    conftest.py's _no_real_redis), so cache hits actually round-trip
+    through JSON like they would against real Redis.
+    """
+    cache = RedisCache(ttl=60)
+    cache._redis = _FakeRedis()
+    with patch("api.routes.jobs.jobs_cache", cache):
+        yield cache
 
 
 @pytest.fixture
@@ -125,6 +155,36 @@ class TestListJobs:
         client_obj, _ = client
         response = client_obj.get("/api/v1/jobs?status=invalid")
         assert response.status_code == 422
+
+    def test_list_jobs_cache_hit_returns_valid_job_data(self, client, real_jobs_cache):
+        """Regression: a warm jobs-list cache must return the same job
+        data as the cache-miss path, not a 500.
+
+        jobs_cache.set() used to be called with raw ScrapingJobInDB
+        instances. RedisCache.set() falls back to `str(obj)` for
+        anything json.dumps can't natively serialize, so the cached
+        value became a list of Pydantic repr strings; reading it back
+        made FastAPI's response validation reject it with a 500.
+        """
+        client_obj, mock_db = client
+        job_doc = {
+            "job_id": "job-1",
+            "name": "Test Job",
+            "url": "https://example.com",
+            "selectors": VALID_SELECTORS,
+        }
+        mock_db.scraping_jobs.find = MagicMock(
+            return_value=_make_mock_cursor([job_doc])
+        )
+
+        first = client_obj.get("/api/v1/jobs")
+        assert first.status_code == 200
+        assert first.json()[0]["job_id"] == "job-1"
+
+        # Second call hits the now-warm cache instead of querying Mongo.
+        second = client_obj.get("/api/v1/jobs")
+        assert second.status_code == 200
+        assert second.json() == first.json()
 
 
 class TestDeleteJob:
