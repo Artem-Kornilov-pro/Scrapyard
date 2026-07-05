@@ -13,7 +13,7 @@
       "gridPos": { "x": 0, "y": 0, "w": 14, "h": 9 },
       "targets": [
         {
-          "datasource": "Prometheus",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "sum by(status) (rate(http_requests_total[1m]))",
           "legendFormat": "HTTP {{ status }}",
           "refId": "A"
@@ -53,7 +53,7 @@
       "gridPos": { "x": 14, "y": 0, "w": 5, "h": 4 },
       "targets": [
         {
-          "datasource": "Prometheus",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "round(sum(rate(http_requests_total{status=~\"5..\"}[5m])), 0.001)",
           "refId": "A"
         }
@@ -79,7 +79,7 @@
       "gridPos": { "x": 19, "y": 0, "w": 5, "h": 4 },
       "targets": [
         {
-          "datasource": "Prometheus",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
           "refId": "A"
         }
@@ -106,7 +106,7 @@
       "gridPos": { "x": 14, "y": 4, "w": 5, "h": 5 },
       "targets": [
         {
-          "datasource": "Prometheus",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "redis_up",
           "legendFormat": "Redis",
           "refId": "A"
@@ -128,7 +128,7 @@
       "gridPos": { "x": 19, "y": 4, "w": 5, "h": 5 },
       "targets": [
         {
-          "datasource": "Prometheus",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "redis_connected_clients",
           "refId": "A"
         }
@@ -145,13 +145,13 @@
       "gridPos": { "x": 0, "y": 9, "w": 14, "h": 9 },
       "targets": [
         {
-          "datasource": "Prometheus",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "histogram_quantile(0.50, sum by(path, le) (rate(http_request_duration_seconds_bucket[5m])))",
           "legendFormat": "p50 {{ path }}",
           "refId": "A"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "histogram_quantile(0.95, sum by(path, le) (rate(http_request_duration_seconds_bucket[5m])))",
           "legendFormat": "p95 {{ path }}",
           "refId": "B"
@@ -172,13 +172,13 @@
       "gridPos": { "x": 14, "y": 9, "w": 10, "h": 9 },
       "targets": [
         {
-          "datasource": "Prometheus",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "redis_memory_used_bytes",
           "legendFormat": "Used",
           "refId": "A"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "redis_memory_max_bytes",
           "legendFormat": "Max",
           "refId": "B"
@@ -187,6 +187,111 @@
       "fieldConfig": {
         "defaults": { "unit": "bytes", "custom": { "drawStyle": "line" } }
       }
+    },
+    {
+      "id": 8,
+      "title": "Celery Task Throughput",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 18, "w": 14, "h": 9 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(celery_task_succeeded_total[5m]))",
+          "legendFormat": "succeeded",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(celery_task_failed_total[5m]))",
+          "legendFormat": "failed",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "tps", "custom": { "drawStyle": "line", "fillOpacity": 10 } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "failed" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "succeeded" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+          }
+        ]
+      },
+      "options": { "legend": { "calcs": ["last", "sum"], "displayMode": "list", "placement": "bottom" } }
+    },
+    {
+      "id": 9,
+      "title": "Celery Worker Status",
+      "type": "stat",
+      "gridPos": { "x": 14, "y": 18, "w": 5, "h": 4 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "max(celery_worker_up)",
+          "legendFormat": "Worker",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+          ]
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" }
+    },
+    {
+      "id": 10,
+      "title": "Active Jobs",
+      "type": "stat",
+      "gridPos": { "x": 19, "y": 18, "w": 5, "h": 4 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "scrapyard_jobs_total{status=\"active\"}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "green" } }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" }
+    },
+    {
+      "id": 11,
+      "title": "Jobs by Status",
+      "type": "bargauge",
+      "gridPos": { "x": 14, "y": 22, "w": 10, "h": 5 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "scrapyard_jobs_total",
+          "legendFormat": "{{ status }}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "active" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "paused" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "error" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          }
+        ]
+      },
+      "options": { "displayMode": "lcd", "orientation": "horizontal" }
     }
   ]
 }
