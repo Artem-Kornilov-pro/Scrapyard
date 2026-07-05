@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Scrapyard API",
     description="Web Scraper as a Service — платформа для распределенного парсинга",
-    version="1.2.0",
+    version="1.3.0",
     lifespan=lifespan,
 )
 

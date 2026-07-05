@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.3.0] — 2026-07-05
 
 ### Added (web dashboard)
 - `web/` — a React + TypeScript + Vite dashboard: job list with status filters and inline actions (run/pause/resume/delete), a job creation form with a visual selector/field builder and a live "Test selectors" dry-run preview, a job detail page (results, logs, diff between runs, JSON/CSV export), and an analytics page (job-status counts, success rate, slowest jobs chart). Client-side routing with animated page transitions (React Router + Framer Motion), light/dark theme, and an optional locally-stored API key sent as `X-API-Key`.
