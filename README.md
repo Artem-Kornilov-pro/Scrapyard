@@ -95,11 +95,16 @@ docker-compose up -d
 | Alertmanager | `http://localhost:9093` |
 | Jaeger (traces) | `http://localhost:16686` |
 
-The "Scrapyard Overview" Grafana dashboard is auto-provisioned. It shows request rate by status code, P95 latency, error rate, and Redis stats.
+The "Scrapyard Overview" Grafana dashboard is auto-provisioned (datasource pinned to a fixed `uid` so re-provisioning never creates a duplicate). It shows request rate by status code, P95 latency, per-endpoint latency, Redis stats, Celery task throughput, worker status, and job counts by status.
 
 Alert rules (`docker/prometheus-alerts.yml`) cover a dead worker, a worker that's up but not draining its queue, a high API error rate, and jobs stuck in `error` status. `docker/alertmanager.yml` ships with a no-op receiver — alerts show up in its UI immediately, add a Slack/webhook receiver there for real notifications.
 
 Tracing (`ENABLE_TRACING=true` by default in `.env.example`) exports spans for the API, Celery tasks, MongoDB, and Redis to the bundled Jaeger — open a trace for a scrape job to see exactly where its time went.
+
+> **Upgrading an existing `.env`?** New settings land in `.env.example` over time (proxy rotation, tracing, etc.) but are never added to your own `.env` automatically. If a feature seems to silently do nothing after pulling updates, diff the two files and copy over what's missing:
+> ```bash
+> diff <(grep -o '^[A-Z_]*' .env | sort) <(grep -o '^[A-Z_]*' .env.example | sort)
+> ```
 
 ### Frontend development
 
